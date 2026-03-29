@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { updateSupabaseSession } from "@/lib/supabase/middleware";
-import { parseAppRole, hasMinRole, type AppRole } from "@/lib/app-role";
+// Imports relatifs requis : les alias @/ dans le middleware Edge peuvent échouer sur Vercel.
+import { updateSupabaseSession } from "./src/lib/supabase/middleware";
+import { parseAppRole, hasMinRole, type AppRole } from "./src/lib/app-role";
 
 const LOGIN_PATH = "/login";
 
