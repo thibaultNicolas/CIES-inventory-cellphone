@@ -1,0 +1,2466 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "description": "API for use by Freightcom customers. This API uses polling for some long running requests.\nIn those cases the initial request will return a 202 Accepted status.\n\n\n\n## What's New In Version 2.6.2\n\nVersion 2.6.2, released in November 2025, adds the following new field.\n\n- **FDA regulated**\n  - **Required** for package and courier pak shipments from Canada to the US. At time of writing, other shipments are not affected by this field.\n  - If required, please add the field fda_regulated to all customs products. If a product is regulated by the U.S. Food and Drug Administration (FDA), specify fda_regulated \"yes\". Otherwise, specify \"no\". Please note that the allowed values are strings, not true/false.\n  - By correctly identifying FDA-regulated products, the system can automatically prevent rates or bookings for carriers that do not accept such items, helping you avoid delays, rejections, or additional compliance issues at the border.\n\n### List Of All Fields Added Or Modified In 2.6.2\n\nThe following is only a list of all fields added or modified in version 2.6.2. Please read the fields' descriptions in the endpoints' documentation for more information.\n\n- `POST /rate`\n  - Request Body\n    - details\n      - customs_data\n        - products\n          - fda_regulated - *new field*\n          - completed_kitchen_cabinets_or_vanities - *new field*\n- `POST /shipment`\n  - Request Body\n    - details\n      - customs_data\n        - products\n          - fda_regulated - *new field*\n          - completed_kitchen_cabinets_or_vanities - *new field*\n    - customs_invoice\n      - details\n        - products\n          - fda_regulated - *new field*\n          - completed_kitchen_cabinets_or_vanities - *new field*\n- `GET /shipment/{shipment_id}`\n  - 200 Response\n    - shipment\n      - details\n        - customs_data\n          - products\n            - fda_regulated - *new field*\n            - completed_kitchen_cabinets_or_vanities - *new field*\n\n\n\n## What's New In Version 2.6.1\n\nVersion 2.6.1, released in November 2025, includes the following changes:\n\n- **Email addresses now required for all international shipments**\n  - The origin and destination of every international shipment now each require at least one email address.\n  - This change was motivated by a recent change in UPS's requirements for international shipments.\n\nThis version also includes the following changes that apply **only to package and courier pak shipments from Canada to the US**.\nAll other shipments will be unaffected by these changes.\n\n- **Steel, aluminum, and copper allocations**\n  - You can now specify the steel, aluminum, and copper allocations for each of your customs products.\n  - Providing steel, aluminum, and copper allocations can reduce your customs charges.\n  - Omitting this information may result in higher customs charges than necessary.\n- **Guaranteed customs charges**\n  - For an additional fee, you can receive a guarantee that you will not receive any additional charges on the clearance of the shipment - provided the product information, description and HTS codes are correct.\n  - To request guaranteed customs charges, specify request_guaranteed_customs_charges true in the customs_data object when requesting a rate or booking a shipment. If the rate you receive has customs_charge_data.is_rate_guaranteed true, then its customs charges are guaranteed.\n- **Non-auto parts**\n  - You can now certify that your customs products do not contain auto parts. This may reduce tariffs if the product's HTS Code implies it may contain auto parts.\n- **Rate fields removed/renamed**\n  - Some of the customs_charge_data fields were removed or renamed. Please update your code accordingly. See below for details.\n\n### List Of All Fields Added Or Modified In 2.6.1\n\nThe following is only a list of all fields added or modified in version 2.6.1. Please read the fields' descriptions in the endpoints' documentation for more information.\n\n- `POST /rate`\n  - Request Body\n    - details\n      - origin\n        - email_addresses - *description and validation updated*\n      - destination\n        - email_addresses - *description and validation updated*\n      - customs_data\n        - products\n          - non_auto_parts - *new field*\n          - product_composition_allocation - *new field*\n          - product_composition_allocation_zero - *new field*\n        - request_guaranteed_customs_charges - *new field*\n- `GET /rate/{rate_id}`\n  - 200 Response\n    - rates\n      - customs_charge_data\n        - brokerage_surcharge_keys - *removed*\n        - government_fees_surcharge_keys - *removed*\n        - guarantee_fee_surcharge_keys - *new field*\n        - carrier_and_government_fees_surcharge_keys - *new field*\n        - is_rate_guaranteed - *new field*\n- `POST /shipment`\n  - Request Body\n    - details\n      - origin\n        - email_addresses - *description and validation updated*\n      - destination\n        - email_addresses - *description and validation updated*\n      - customs_data\n        - products\n          - non_auto_parts - *new field*\n          - product_composition_allocation - *new field*\n          - product_composition_allocation_zero - *new field*\n        - request_guaranteed_customs_charges - *new field*\n    - customs_invoice\n      - details\n        - products\n          - non_auto_parts - *new field*\n          - product_composition_allocation - *new field*\n          - product_composition_allocation_zero - *new field*\n- `GET /shipment/{shipment_id}`\n  - 200 Response\n    - shipment\n      - details\n        - customs_data\n          - products\n            - non_auto_parts - *new field*\n            - product_composition_allocation - *new field*\n            - product_composition_allocation_zero - *new field*\n          - request_guaranteed_customs_charges - *new field*\n      - rate\n        - customs_charge_data\n          - brokerage_surcharge_keys - *removed*\n          - government_fees_surcharge_keys - *removed*\n          - guarantee_fee_surcharge_keys - *new field*\n          - carrier_and_government_fees_surcharge_keys - *new field*\n          - is_rate_guaranteed - *new field*\n\n\n\n## What's New In Version 2.6.0\n\nVersion 2.6.0, released in September 2025, introduces the following features. For a complete list of modified endpoints and fields, see the section below.\n\n- **Export charges included in rates**\n  - Include customs_data when requesting a rate or booking a shipment.\n  - Surcharge types that correspond to export charges will be listed in the customs_charge_data field.\n  - Applies only to package and courier pak shipments from Canada to the US.\n  - Documentation may refer to 'export charges' or 'customs charges' interchangeably.\n- **DDP vs DDU shipments**\n  - To book a DDP shipment, include customs_data and select tax recipient type 'shipper'.\n    - If your primary payment method is Net Terms, you must pay for export charges with a credit card, specified by the customs_and_duties_payment_method_id.\n  - To book a DDU shipment, omit customs_data and select tax recipient type 'receiver'.\n  - These changes only affect package and courier pak shipments from Canada to the US.\n- **Uploading CUSMA and other documents**\n  - When booking a shipment, you can upload customs documents via the paperless_customs_documents field.\n    - Supported carriers: FedEx Courier and UPS.\n    - Size limit: approximately 4.5 MB for all files, before Base64 encoding.\n  - If you specified cusma_included true for any of your customs products, you must upload a CUSMA document with type 'cusma-form'.\n    - Only applies to carriers that support uploading customs documents.\n\nThere is also a new restriction:\n\n- **Must use carrier as broker below $800 USD**\n  - Package and courier pak shipments from Canada to the US must use carrier as broker if their customs products are valued at $800 USD or less.\n\n### List Of All Fields Added Or Modified In 2.6.0\n\nThe following is only a list of all fields added or modified in version 2.6.0. Please read the fields' descriptions in the endpoints' documentation for more information.\n\n- `POST /rate`\n  - Request Body\n    - details\n      - customs_data - *new field*\n- `GET /rate/{rate_id}`\n  - 200 Response\n    - rates\n      - paperless - *new field*\n      - customs_charge_data - *new field*\n- `POST /shipment`\n  - Request Body\n    - customs_and_duties_payment_method_id - *new field*\n    - details\n      - customs_data - *new field*\n    - customs_invoice\n      - broker\n        - use_carrier - *description updated*\n      - details\n        - tax_recipient\n          - type - *description updated*\n        - products\n          - hs_code - *description updated*\n          - cusma_included - *new field*\n    - paperless_customs_documents - *new field*\n- `GET /shipment/{shipment_id}`\n  - 200 Response\n    - shipment\n      - details\n        - customs_data - *new field*\n      - rate\n        - paperless - *new field*\n        - customs_charge_data - *new field*\n      - paperless_customs_documents - *new field*\n",
+    "version": "2.6.2",
+    "title": "Freightcom Customer API",
+    "contact": {
+      "name": "Freightcom Inc.",
+      "url": "https://www.freightcom.com",
+      "email": "techsupport@freightcom.com"
+    }
+  },
+  "servers": [
+    {
+      "url": "https://external-api.freightcom.com",
+      "description": "live"
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "ApiKeyAuth": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "Authorization"
+      }
+    },
+    "responses": {
+      "UnauthorizedError": {
+        "description": "API key is missing or invalid"
+      },
+      "BadData": {
+        "description": "Request data is incorrect or conflicts with existing customer information.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "object",
+              "properties": {
+                "message": {
+                  "type": "string",
+                  "description": "The error message."
+                },
+                "data": {
+                  "type": "object",
+                  "description": "Additional data about the error."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "schemas": {
+      "Address": {
+        "type": "object",
+        "required": [
+          "address_line_1",
+          "city",
+          "region",
+          "country",
+          "postal_code"
+        ],
+        "properties": {
+          "address_line_1": {
+            "type": "string",
+            "description": "Street address.",
+            "example": "200 University Avenue West"
+          },
+          "address_line_2": {
+            "type": "string",
+            "description": "Additional street address."
+          },
+          "unit_number": {
+            "type": "string",
+            "description": "Unit/Suite/Apt.",
+            "example": "42a"
+          },
+          "city": {
+            "type": "string",
+            "description": "Name of the city.",
+            "example": "Waterloo"
+          },
+          "region": {
+            "type": "string",
+            "description": "Province or state postal abbreviation.",
+            "example": "ON"
+          },
+          "country": {
+            "type": "string",
+            "description": "ISO 3166-1 alpha-2 code for the country.",
+            "example": "CA"
+          },
+          "postal_code": {
+            "type": "string",
+            "description": "Postal code or zip code"
+          }
+        }
+      },
+      "PhoneNumber": {
+        "type": "object",
+        "description": "Phone number without any special characters.",
+        "properties": {
+          "number": {
+            "type": "string",
+            "example": "5554447777"
+          },
+          "extension": {
+            "type": "string",
+            "example": "123"
+          }
+        }
+      },
+      "Establishment": {
+        "type": "object",
+        "description": "Contains information about an individual, company, or other entity at a location.",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "The name of the individual or company represented by this establishment.",
+            "example": "Philip J Fry"
+          },
+          "address": {
+            "$ref": "#/components/schemas/Address"
+          },
+          "residential": {
+            "type": "boolean",
+            "description": "Whether this address is a residential."
+          },
+          "tailgate_required": {
+            "type": "boolean"
+          },
+          "instructions": {
+            "type": "string"
+          },
+          "contact_name": {
+            "type": "string"
+          },
+          "phone_number": {
+            "$ref": "#/components/schemas/PhoneNumber"
+          },
+          "email_addresses": {
+            "type": "array",
+            "description": "List of email addresses that can be used for notifications if supported by the carrier. If provided and the carrier supports receiving email addresses then one or more email addresses will be sent to the carrier. Email addresses will be sent to the carrier in the order provided in this field. Carrier may or may not provide email notifications.\n\n**(UPDATED in 2.6.1)** At least one email address is required for all international shipments.\nThis applies to both the origin and the destination.\n",
+            "items": {
+              "type": "string",
+              "format": "email"
+            }
+          },
+          "receives_email_updates": {
+            "type": "boolean",
+            "description": "If true then the email addresses in email_addresses will be used for notifications."
+          }
+        }
+      },
+      "Origin": {
+        "$ref": "#/components/schemas/Establishment"
+      },
+      "Destination": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Establishment"
+          },
+          {
+            "type": "object",
+            "required": [
+              "ready_at",
+              "ready_until",
+              "signature_requirement"
+            ],
+            "properties": {
+              "ready_at": {
+                "$ref": "#/components/schemas/TimeOfDay"
+              },
+              "ready_until": {
+                "$ref": "#/components/schemas/TimeOfDay"
+              },
+              "signature_requirement": {
+                "type": "string",
+                "description": "Whether a signature is required for delivery.",
+                "enum": [
+                  "not-required",
+                  "required",
+                  "adult-required"
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "ShippingDetails": {
+        "type": "object",
+        "description": "Details on a shipment.",
+        "required": [
+          "origin",
+          "destination",
+          "expected_ship_date",
+          "packaging_type",
+          "packaging_properties"
+        ],
+        "properties": {
+          "origin": {
+            "$ref": "#/components/schemas/Origin"
+          },
+          "destination": {
+            "$ref": "#/components/schemas/Destination"
+          },
+          "expected_ship_date": {
+            "$ref": "#/components/schemas/Date"
+          },
+          "packaging_type": {
+            "$ref": "#/components/schemas/PackagingType"
+          },
+          "packaging_properties": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/PackagingPallet"
+              },
+              {
+                "$ref": "#/components/schemas/PackagingPackage"
+              },
+              {
+                "$ref": "#/components/schemas/PackagingCourierPak"
+              },
+              {
+                "$ref": "#/components/schemas/PackagingEnvelope"
+              }
+            ]
+          },
+          "insurance": {
+            "type": "object",
+            "description": "Insurance details for a shipment, if required.",
+            "required": [
+              "type",
+              "total_cost"
+            ],
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "internal",
+                  "carrier"
+                ]
+              },
+              "total_cost": {
+                "$ref": "#/components/schemas/Money"
+              }
+            }
+          },
+          "reference_codes": {
+            "type": "array",
+            "description": "Reference codes for the shipment.",
+            "items": {
+              "type": "string"
+            }
+          },
+          "customs_data": {
+            "type": "object",
+            "description": "**(NEW in 2.6.0)** Applies only to package and courier pak shipments from Canada to the US. If present, the rates will include customs charges and the shipment will be booked with DDP (shipper pays the customs charges). The customs charges will be based on the data in this object.\nIf customs_invoice.details is also present, its tax_recipient.type must be 'shipper' and its products must contain the same data as this object's products.\n",
+            "required": [
+              "products"
+            ],
+            "properties": {
+              "products": {
+                "type": "array",
+                "description": "Data for customs about the products being shipped. If customs_invoice.details is also present, it must contain the same products as this array.",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "hs_code",
+                    "country_of_origin",
+                    "num_units",
+                    "unit_price",
+                    "description",
+                    "fda_regulated"
+                  ],
+                  "properties": {
+                    "hs_code": {
+                      "type": "string",
+                      "description": "The 10 digit HTS Code."
+                    },
+                    "country_of_origin": {
+                      "type": "string",
+                      "description": "ISO 3166-1 alpha-2 code for the country.",
+                      "example": "CA"
+                    },
+                    "num_units": {
+                      "type": "integer",
+                      "example": 1
+                    },
+                    "unit_price": {
+                      "$ref": "#/components/schemas/Money"
+                    },
+                    "description": {
+                      "type": "string",
+                      "description": "The description of the product. Maximum length of 35 characters for UPS"
+                    },
+                    "cusma_included": {
+                      "type": "boolean",
+                      "description": "Defaults to false. If true, you certify the goods meet CUSMA (USMCA) rules of origin and that a valid certification of origin is provided.\n\nIf the carrier accepts paperless_customs_documents, a valid CUSMA document with type 'cusma-form' must be included in the paperless_customs_documents.\n"
+                    },
+                    "non_auto_parts": {
+                      "type": "boolean",
+                      "description": "**(NEW in 2.6.1)** If the product's HTS Code implies it may contain auto parts, then you may receive additional tariffs.\n\nBy specifying true in this field, you certify that your product does **not** contain auto parts.\nThis will avoid any tariffs related to auto parts.\n\nIf this field is false or omitted, the product's HTS Code will determine whether you receive any tariffs related to auto parts.\n"
+                    },
+                    "completed_kitchen_cabinets_or_vanities": {
+                      "type": "boolean",
+                      "description": "**(NEW in 2.6.1)** If the product's HTS Code implies it may contain completed kitchen cabinets or vanities, then you may receive additional tariffs.\n\nBy specifying true in this field, you certify that your product does contain completed kitchen cabinets or vanities.\nThis will avoid any tariffs related to not completed kitchen cabinets or vanities.\n\nIf this field is false or omitted, the product's HTS Code will determine whether you receive any tariffs related to completed kitchen cabinets or vanities.\n"
+                    },
+                    "fda_regulated": {
+                      "type": "enum",
+                      "description": "**(NEW in 2.6.2)** Please specify \"yes\" if this product is regulated by the U.S. Food and Drug Administration (FDA) and \"no\" if it is not.\n\nIf your shipment contains an FDA regulated product, some carriers will not accept it.\nBy specifying \"yes\", we can provide rates and book shipments only for carriers that will accept FDA regulated products.\n",
+                      "enum": [
+                        "yes",
+                        "no"
+                      ]
+                    },
+                    "product_composition_allocation": {
+                      "type": "object",
+                      "description": "**(NEW in 2.6.1)** If your product contains steel/aluminum/copper, provide this object with the applicable allocation percentages.\nIf you do not provide these values, you may receive higher customs charges than necessary.\n\n`provided` must be set to true when you provide these values.\n\nTo specify zero steel/aluminum/copper allocation, you must either set `provided` to true, or set `product_composition_allocation_zero` to true in the parent object.\nIf `product_composition_allocation_zero` is true, this object will not affect rates and can be omitted.\n\nIf you specify a non-zero allocation and the carrier accepts `paperless_customs_documents`, a valid Steel/Aluminum/Copper document with type `\"product-composition-allocation-document\"` must be included in the `paperless_customs_documents`.\n",
+                      "properties": {
+                        "provided": {
+                          "type": "boolean",
+                          "description": "Defaults to false. Set to true to specify steel/aluminum/copper allocation percentages.\n\nDoes not affect rates if you have set `product_composition_allocation_zero` to true.\n\nIf both this field and `product_composition_allocation_zero` are omitted or false, then you are not specifying any steel/aluminum/copper allocation percentages, regardless of the percentage values in this object.\nAs a result, you may receive higher customs charges than necessary.\n"
+                        },
+                        "steel_percentage": {
+                          "type": "number",
+                          "description": "If your product contains steel, specify the percentage of steel that applies, where 0.5 means 50%. Defaults to 0 if omitted and if `provided` is true.\n\nMust be omitted or 0 if `provided` is false or if `product_composition_allocation_zero` is true.\n",
+                          "minimum": 0,
+                          "maximum": 1
+                        },
+                        "aluminum_percentage": {
+                          "type": "number",
+                          "description": "If your product contains aluminum, specify the percentage of aluminum that applies, where 0.5 means 50%. Defaults to 0 if omitted and if `provided` is true.\n\nMust be omitted or 0 if `provided` is false or if `product_composition_allocation_zero` is true.\n",
+                          "minimum": 0,
+                          "maximum": 1
+                        },
+                        "copper_percentage": {
+                          "type": "number",
+                          "description": "If your product contains copper, specify the percentage of copper that applies, where 0.5 means 50%. Defaults to 0 if omitted and if `provided` is true.\n\nMust be omitted or 0 if `provided` is false or if `product_composition_allocation_zero` is true.\n",
+                          "minimum": 0,
+                          "maximum": 1
+                        }
+                      }
+                    },
+                    "product_composition_allocation_zero": {
+                      "type": "boolean",
+                      "description": "**(NEW in 2.6.1)** Optional field that defaults to false. If true, you certify that your product's composition allocation percentages are all 0%.\n\nFor simplicity, you may choose to ignore this field and always explicitly specify your product's composition allocation percentages, as long as you specify `product_composition_allocation.provided` true.\n\nIf this field is true, the `product_composition_allocation` object will not affect rates. However, if you specify a non-zero allocation percentage, you will receive an error.\n"
+                    }
+                  }
+                }
+              },
+              "request_guaranteed_customs_charges": {
+                "type": "boolean",
+                "description": "**(NEW in 2.6.1)** If false or omitted, customs charges will be estimates only. If true, guaranteed customs charges will be requested.\nIf a rate has is_rate_guaranteed true, then all of its customs charges are guaranteed - provided the product information, description and HTS codes are correct.\n"
+              }
+            }
+          }
+        }
+      },
+      "Date": {
+        "type": "object",
+        "required": [
+          "year",
+          "month",
+          "day"
+        ],
+        "properties": {
+          "year": {
+            "type": "integer",
+            "example": 2006
+          },
+          "month": {
+            "type": "integer",
+            "example": 6
+          },
+          "day": {
+            "type": "integer",
+            "example": 7
+          }
+        }
+      },
+      "TimeOfDay": {
+        "type": "object",
+        "description": "Time of day in 24 hour time.",
+        "required": [
+          "hour",
+          "minute"
+        ],
+        "properties": {
+          "hour": {
+            "type": "integer",
+            "example": 15
+          },
+          "minute": {
+            "type": "integer",
+            "example": 6
+          }
+        }
+      },
+      "Money": {
+        "type": "object",
+        "properties": {
+          "currency": {
+            "type": "string",
+            "description": "ISO 4217 alpha code of the currency such as: CAD, USD, EUR, INR, etc.\n",
+            "example": "CAD"
+          },
+          "value": {
+            "type": "string",
+            "description": "Value in the lowest common indivisible unit of the currency, e.g. cents. 42.50 CAD would be represented as 4250.\n",
+            "example": "4250"
+          }
+        }
+      },
+      "Weight": {
+        "type": "object",
+        "properties": {
+          "unit": {
+            "type": "string",
+            "enum": [
+              "kg",
+              "lb",
+              "g",
+              "oz"
+            ],
+            "description": "Unit that the weight is in.",
+            "example": "lb"
+          },
+          "value": {
+            "type": "number",
+            "description": "Weight value in the unit.",
+            "example": 2.95
+          }
+        }
+      },
+      "Cuboid": {
+        "type": "object",
+        "properties": {
+          "unit": {
+            "type": "string",
+            "enum": [
+              "mm",
+              "cm",
+              "m",
+              "in",
+              "ft"
+            ],
+            "description": "Unit that the dimension is in.",
+            "example": "ft"
+          },
+          "l": {
+            "type": "number",
+            "description": "Length value in the unit.",
+            "example": 5
+          },
+          "w": {
+            "type": "number",
+            "description": "Width value in the unit.",
+            "example": 5
+          },
+          "h": {
+            "type": "number",
+            "description": "Height value in the unit.",
+            "example": 5
+          }
+        }
+      },
+      "Box": {
+        "type": "object",
+        "properties": {
+          "weight": {
+            "$ref": "#/components/schemas/Weight"
+          },
+          "cuboid": {
+            "$ref": "#/components/schemas/Cuboid"
+          }
+        }
+      },
+      "PackagingType": {
+        "type": "string",
+        "enum": [
+          "pallet",
+          "package",
+          "courier-pak",
+          "envelope"
+        ]
+      },
+      "PackagingPallet": {
+        "type": "object",
+        "required": [
+          "pallet_type",
+          "pallets"
+        ],
+        "properties": {
+          "pallet_type": {
+            "type": "string",
+            "description": "The pallet types.",
+            "enum": [
+              "ltl"
+            ]
+          },
+          "has_stackable_pallets": {
+            "type": "boolean",
+            "description": "Pallets are stackable.",
+            "example": true
+          },
+          "dangerous_goods": {
+            "type": "string",
+            "description": "The shipment's dangerous goods. Empty if it does not contain dangerous goods.",
+            "enum": [
+              "limited-quantity",
+              "exemption-500-kg",
+              "fully-regulated"
+            ]
+          },
+          "dangerous_goods_details": {
+            "$ref": "#/components/schemas/DangerousGoodsDetails"
+          },
+          "pallets": {
+            "type": "array",
+            "items": {
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/LTLPallet"
+                }
+              ]
+            }
+          },
+          "pallet_service_details": {
+            "type": "object",
+            "description": "Details on the delivery of pallets.",
+            "properties": {
+              "limited_access_delivery_type": {
+                "type": "string",
+                "description": "If limited access delivery the type of delivery.",
+                "enum": [
+                  "construction-site",
+                  "fair",
+                  "farm",
+                  "mall",
+                  "mini-storage-unit",
+                  "place-of-worship",
+                  "school",
+                  "secured-location",
+                  "other"
+                ]
+              },
+              "limited_access_delivery_other_name": {
+                "type": "string",
+                "description": "Provided if the limited_access_type is 'other'."
+              },
+              "in_bond": {
+                "type": "boolean",
+                "description": "If the shipment requires a US in-bond service."
+              },
+              "in_bond_details": {
+                "type": "object",
+                "description": "Details for in bond if needed.",
+                "required": [
+                  "type",
+                  "name",
+                  "address",
+                  "contact_method"
+                ],
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "immediate-exportation",
+                      "transportation-and-exportation"
+                    ]
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "address": {
+                    "type": "string",
+                    "description": "Address of the warehouse or carrier that will cancel the US bond."
+                  },
+                  "contact_method": {
+                    "type": "string",
+                    "description": "Which contact method to utilize.",
+                    "enum": [
+                      "email-address",
+                      "phone-number",
+                      "fax-number"
+                    ]
+                  },
+                  "contact_email_address": {
+                    "type": "string"
+                  },
+                  "contact_phone_number": {
+                    "$ref": "#/components/schemas/PhoneNumber"
+                  }
+                }
+              },
+              "appointment_delivery": {
+                "type": "boolean"
+              },
+              "protect_from_freeze": {
+                "type": "boolean"
+              },
+              "threshold_pickup": {
+                "type": "boolean"
+              },
+              "threshold_delivery": {
+                "type": "boolean"
+              }
+            }
+          }
+        }
+      },
+      "LTLPallet": {
+        "type": "object",
+        "required": [
+          "measurements",
+          "description",
+          "freight_class"
+        ],
+        "properties": {
+          "measurements": {
+            "$ref": "#/components/schemas/Box"
+          },
+          "description": {
+            "type": "string",
+            "description": "The description of the pallet goods."
+          },
+          "freight_class": {
+            "type": "string",
+            "description": "Freight class of the pallet."
+          },
+          "nmfc": {
+            "type": "string"
+          },
+          "contents_type": {
+            "type": "string"
+          },
+          "num_pieces": {
+            "type": "integer"
+          }
+        }
+      },
+      "PackagingPackage": {
+        "type": "object",
+        "required": [
+          "packages"
+        ],
+        "properties": {
+          "includes_return_label": {
+            "type": "boolean",
+            "description": "If true then return labels will be included in the shipment documents."
+          },
+          "has_dangerous_goods": {
+            "type": "boolean",
+            "description": "Indicates the shipment's packages contain dangerous goods. When true, dangerous_goods_details must also be provided."
+          },
+          "dangerous_goods_details": {
+            "$ref": "#/components/schemas/PackageDangerousGoodsDetails"
+          },
+          "packages": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "measurements",
+                "description"
+              ],
+              "properties": {
+                "measurements": {
+                  "$ref": "#/components/schemas/Box"
+                },
+                "description": {
+                  "type": "string"
+                },
+                "special_handling_required": {
+                  "type": "boolean"
+                }
+              }
+            }
+          }
+        }
+      },
+      "PackagingCourierPak": {
+        "type": "object",
+        "required": [
+          "courier_paks"
+        ],
+        "properties": {
+          "includes_return_label": {
+            "type": "boolean",
+            "description": "If true then return labels will be included in the shipment documents."
+          },
+          "has_dangerous_goods": {
+            "type": "boolean",
+            "description": "Courier paks contain dangerous goods."
+          },
+          "courier_paks": {
+            "type": "array",
+            "required": [
+              "weight",
+              "description"
+            ],
+            "items": {
+              "type": "object",
+              "properties": {
+                "weight": {
+                  "$ref": "#/components/schemas/Weight"
+                },
+                "description": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "PackagingEnvelope": {
+        "type": "object",
+        "properties": {
+          "includes_return_label": {
+            "type": "boolean",
+            "description": "If true then return labels will be included in the shipment documents."
+          }
+        }
+      },
+      "PackageDangerousGoodsDetails": {
+        "type": "object",
+        "description": "Dangerous goods details for package shipments. Required when has_dangerous_goods is true.",
+        "required": [
+          "goods_class",
+          "united_nations_number"
+        ],
+        "properties": {
+          "goods_class": {
+            "type": "string"
+          },
+          "united_nations_number": {
+            "type": "string"
+          }
+        }
+      },
+      "Rate": {
+        "type": "object",
+        "properties": {
+          "carrier_name": {
+            "type": "string",
+            "description": "The name of the carrier."
+          },
+          "service_name": {
+            "type": "string",
+            "description": "The name of the service."
+          },
+          "service_id": {
+            "type": "string",
+            "description": "The ID of the service, utilized for booking."
+          },
+          "valid_until": {
+            "$ref": "#/components/schemas/Date"
+          },
+          "total": {
+            "$ref": "#/components/schemas/Money"
+          },
+          "base": {
+            "$ref": "#/components/schemas/Money"
+          },
+          "surcharges": {
+            "type": "array",
+            "description": "An array of surcharges.",
+            "items": {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "description": "The surcharge type.",
+                  "example": "fuel"
+                },
+                "amount": {
+                  "$ref": "#/components/schemas/Money"
+                }
+              }
+            }
+          },
+          "taxes": {
+            "type": "array",
+            "description": "An array of taxes.",
+            "items": {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "description": "The tax type.",
+                  "example": "fuel"
+                },
+                "amount": {
+                  "$ref": "#/components/schemas/Money"
+                }
+              }
+            }
+          },
+          "transit_time_days": {
+            "type": "integer",
+            "description": "The number of days that the shipment will take to reach the destination.",
+            "example": 5
+          },
+          "transit_time_not_available": {
+            "type": "boolean",
+            "description": "Some carriers may not provide a valid transit time. If this value is true then transit_time_days should be ignored regardless of the value provided."
+          },
+          "paperless": {
+            "type": "boolean",
+            "description": "**(NEW in 2.6.0)** If true then the rate supports a paperless customs invoice. With certain carriers, you may upload additional paperless customs documents when booking the shipment, such as a CUSMA Certificate, by providing paperless_customs_documents when booking."
+          },
+          "customs_charge_data": {
+            "type": "object",
+            "description": "**(NEW in 2.6.0)** If present, contains data about the customs charges for a DDP shipment (shipper pays the customs charges).",
+            "properties": {
+              "duties_and_taxes_surcharge_keys": {
+                "type": "array",
+                "description": "The surcharge types that correspond to customs duties and taxes charges.\n\n**(UPDATED in 2.6.1)** When is_rate_guaranteed is true, these charges are guaranteed: you will not receive any additional duties and taxes charges - provided the product information, description and HTS codes are correct.\n",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "guarantee_fee_surcharge_keys": {
+                "type": "array",
+                "description": "**(NEW in 2.6.1)** When is_rate_guaranteed is true, these surcharge types correspond to the additional fees to guarantee all customs charges.\nShould be empty when is_rate_guaranteed is false.\n",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "carrier_and_government_fees_surcharge_keys": {
+                "type": "array",
+                "description": "**(NEW in 2.6.1)** The surcharge types that correspond to customs carrier and government fees.\nThis includes everything related to the customs clearance of your shipment such as clearance, brokerage, FDA, disbursement, MPF, line item, PGA etc.\n\nIf is_rate_guaranteed is true, these charges are guaranteed: you will not receive any additional charges on the clearance of this shipment - provided the product information, description and HTS codes are correct.\n",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "processing_fees_surcharge_keys": {
+                "type": "array",
+                "description": "The surcharge types that correspond to customs processing fees charges.\n\n**(UPDATED in 2.6.1)** When is_rate_guaranteed is true, these charges are guaranteed: you will not receive any additional processing fees - provided the product information, description and HTS codes are correct.\n",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "is_rate_guaranteed": {
+                "type": "boolean",
+                "description": "**(NEW in 2.6.1)** If true, then all customs charges are guaranteed: you will not receive any additional customs charges - provided the product information, description and HTS codes are correct.\nThis encompasses all surcharge types belonging to the customs_charge_data fields.\n\nTo receive guaranteed customs charges, you must specify customs_data.request_guaranteed_customs_charges true when requesting a rate or booking a shipment.\n"
+              }
+            }
+          }
+        }
+      },
+      "PickupDetails": {
+        "type": "object",
+        "description": "Courier pickup details, required if courier service utilized.",
+        "properties": {
+          "pre_scheduled_pickup": {
+            "type": "boolean",
+            "description": "If true then all other fields are ignored. Indicates that the customer has their own arrangements with the carrier for scheduling."
+          },
+          "date": {
+            "$ref": "#/components/schemas/Date"
+          },
+          "ready_at": {
+            "$ref": "#/components/schemas/TimeOfDay"
+          },
+          "ready_until": {
+            "$ref": "#/components/schemas/TimeOfDay"
+          },
+          "pickup_location": {
+            "type": "string"
+          },
+          "contact_name": {
+            "type": "string"
+          },
+          "contact_phone_number": {
+            "$ref": "#/components/schemas/PhoneNumber"
+          }
+        }
+      },
+      "DispatchDetails": {
+        "type": "object",
+        "description": "LTL dispatch details, required if dispatch service utilized.",
+        "properties": {
+          "date": {
+            "$ref": "#/components/schemas/Date"
+          },
+          "ready_at": {
+            "$ref": "#/components/schemas/TimeOfDay"
+          },
+          "ready_until": {
+            "$ref": "#/components/schemas/TimeOfDay"
+          }
+        }
+      },
+      "DangerousGoodsDetails": {
+        "type": "object",
+        "description": "LTL dangerous goods details that are utilized on the BOL. Required if there are dangerous goods when creating a shipment. All fields are required.",
+        "properties": {
+          "packaging_group": {
+            "type": "string"
+          },
+          "goods_class": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "united_nations_number": {
+            "type": "string"
+          },
+          "emergency_contact_name": {
+            "type": "string"
+          },
+          "emergency_contact_phone_number": {
+            "$ref": "#/components/schemas/PhoneNumber"
+          }
+        }
+      }
+    }
+  },
+  "security": [
+    {
+      "ApiKeyAuth": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "rate",
+      "description": "Obtain estimated rates based upon a small number of details."
+    },
+    {
+      "name": "shipment",
+      "description": "Retrieving and booking shipments."
+    },
+    {
+      "name": "finance",
+      "description": "Retrieve financial details."
+    },
+    {
+      "name": "service",
+      "description": "Carrier service details."
+    },
+    {
+      "name": "manifest",
+      "description": "Initiate a manifest request and get the results."
+    },
+    {
+      "name": "2.6.2 changes",
+      "description": "Endpoints with changes in version 2.6.2, released in November 2025."
+    },
+    {
+      "name": "2.6.1 changes",
+      "description": "Endpoints with changes in version 2.6.1, released in November 2025."
+    },
+    {
+      "name": "2.6.0 changes",
+      "description": "Endpoints with changes in version 2.6.0, released in September 2025."
+    }
+  ],
+  "paths": {
+    "/rate": {
+      "post": {
+        "description": "Request a rate estimate.",
+        "tags": [
+          "rate",
+          "2.6.2 changes",
+          "2.6.1 changes",
+          "2.6.0 changes"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "services": {
+                    "type": "array",
+                    "description": "List of service IDs for which to get rates. If not provided then all services will be queried for rates.",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "excluded_services": {
+                    "type": "array",
+                    "description": "Excluded list of service IDs for which to ignore rates from.",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "details": {
+                    "$ref": "#/components/schemas/ShippingDetails"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Response with the rate ID that can be used to poll for and retrieve the rate.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "request_id": {
+                      "type": "string",
+                      "description": "The rate ID."
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/rate/{rate_id}": {
+      "get": {
+        "description": "Retrieve a requested rate. Also includes details on the number of pending rate lookups to perform if any.",
+        "tags": [
+          "rate",
+          "2.6.1 changes",
+          "2.6.0 changes"
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "rate_id",
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "description": "The rate ID to retrieve details on."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The results of the rate estimate request. Includes status information if additional lookups need to be performed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "object",
+                      "description": "Status of the rate lookup request.",
+                      "properties": {
+                        "done": {
+                          "type": "boolean",
+                          "description": "If true then the rates search has completed."
+                        },
+                        "total": {
+                          "type": "integer",
+                          "description": "The total number of services that rates will be searched with."
+                        },
+                        "complete": {
+                          "type": "integer",
+                          "description": "The number of services that have had rates searched on."
+                        }
+                      }
+                    },
+                    "rates": {
+                      "type": "array",
+                      "description": "Rate estimates.",
+                      "items": {
+                        "$ref": "#/components/schemas/Rate"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/shipment": {
+      "post": {
+        "summary": "Book a shipment.",
+        "description": "Book a shipment.",
+        "operationId": "shipment-book",
+        "tags": [
+          "shipment",
+          "2.6.2 changes",
+          "2.6.1 changes",
+          "2.6.0 changes"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "unique_id",
+                  "payment_method_id",
+                  "service_id",
+                  "details"
+                ],
+                "properties": {
+                  "unique_id": {
+                    "type": "string",
+                    "description": "Maximum length of 128 characters. Uppercase and lowercase characters are considered equal for comparisons. Used to uniquely identify a shipment. If the unique_id matches a previously created shipment that is in the process of booking or booked successfully then a new shipment will NOT be created and the ID for the previously created shipment will be returned. If the previously created shipment had an error during booking or was cancelled then a new shipment with the unique_id will be created and unique_id will be associated with this new shipment."
+                  },
+                  "payment_method_id": {
+                    "type": "string",
+                    "description": "Payment method to use, obtained from /finance/payment-methods."
+                  },
+                  "customs_and_duties_payment_method_id": {
+                    "type": "string",
+                    "description": "**(NEW in 2.6.0)** Payment method to use to pay for the customs charges when booking a DDP shipment (shipper pays the customs charges). If omitted, payment_method_id will be used to pay for all charges including customs charges.\n\nIf you are booking a DDP shipment and payment_method_id is your Net Terms payment method, then you must specify a credit card payment method in this field to pay for the customs charges.\n\nObtained from /finance/payment-methods.\n"
+                  },
+                  "service_id": {
+                    "type": "string",
+                    "description": "Service to book with."
+                  },
+                  "details": {
+                    "$ref": "#/components/schemas/ShippingDetails"
+                  },
+                  "customs_invoice": {
+                    "type": "object",
+                    "description": "Customs invoice info. Required for international shipments.",
+                    "required": [
+                      "source",
+                      "broker"
+                    ],
+                    "properties": {
+                      "source": {
+                        "type": "string",
+                        "description": "The source of the customs invoice: details provided, will provide in person. In person only available for LTL shipments.\n",
+                        "enum": [
+                          "details",
+                          "in-person"
+                        ]
+                      },
+                      "broker": {
+                        "type": "object",
+                        "description": "Information on the customs invoice broker.",
+                        "properties": {
+                          "use_carrier": {
+                            "type": "boolean",
+                            "description": "If true, the carrier will be used as the broker. Can only be true for courier shipments.\n\n**(UPDATED in 2.6.0)** For package and courier pak shipments from Canada to the US, if the customs products are valued at $800 USD or less, then use_carrier must be true.\n"
+                          },
+                          "name": {
+                            "type": "string",
+                            "description": "Name of the party acting as the broker. Required if use_carrier is false."
+                          },
+                          "account_number": {
+                            "type": "string",
+                            "description": "The customer's account number with the broker"
+                          },
+                          "phone_number": {
+                            "$ref": "#/components/schemas/PhoneNumber"
+                          },
+                          "fax_number": {
+                            "$ref": "#/components/schemas/PhoneNumber"
+                          },
+                          "email_address": {
+                            "type": "string"
+                          },
+                          "usmca_number": {
+                            "type": "string"
+                          },
+                          "fda_number": {
+                            "type": "string"
+                          }
+                        }
+                      },
+                      "details": {
+                        "type": "object",
+                        "description": "Customs invoice details.",
+                        "required": [
+                          "tax_recipient",
+                          "products"
+                        ],
+                        "properties": {
+                          "tax_recipient": {
+                            "type": "object",
+                            "required": [
+                              "type",
+                              "name",
+                              "address",
+                              "phone_number",
+                              "reason_for_export"
+                            ],
+                            "properties": {
+                              "type": {
+                                "type": "string",
+                                "description": "Who will pay the customs charges.\n\n**(UPDATED in 2.6.0)** For package and courier pak shipments from Canada to the US:\n- If the tax-recipient type is 'shipper', then customs_data must be provided in the ShippingDetails.\n- If the tax-recipient type is 'receiver', then customs_data must be omitted from the ShippingDetails.\n",
+                                "enum": [
+                                  "shipper",
+                                  "receiver",
+                                  "other"
+                                ]
+                              },
+                              "shipper_tax_identifier": {
+                                "type": "string"
+                              },
+                              "receiver_tax_identifier": {
+                                "type": "string"
+                              },
+                              "third_party_tax_identifier": {
+                                "type": "string"
+                              },
+                              "other_tax_identifier": {
+                                "type": "string"
+                              },
+                              "name": {
+                                "type": "string"
+                              },
+                              "address": {
+                                "$ref": "#/components/schemas/Address"
+                              },
+                              "phone_number": {
+                                "$ref": "#/components/schemas/PhoneNumber"
+                              },
+                              "reason_for_export": {
+                                "type": "string",
+                                "enum": [
+                                  "gift",
+                                  "repair-warranty",
+                                  "commercial-sample",
+                                  "return-shipment",
+                                  "commercially-sold-goods",
+                                  "other"
+                                ]
+                              },
+                              "additional_remarks": {
+                                "type": "string"
+                              },
+                              "comments": {
+                                "type": "string",
+                                "description": "Comments that will appear on the generated customs invoice document."
+                              }
+                            }
+                          },
+                          "products": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "required": [
+                                "product_name",
+                                "weight",
+                                "country_of_origin",
+                                "num_units",
+                                "unit_price",
+                                "description"
+                              ],
+                              "properties": {
+                                "product_name": {
+                                  "type": "string"
+                                },
+                                "weight": {
+                                  "$ref": "#/components/schemas/Weight"
+                                },
+                                "hs_code": {
+                                  "type": "string",
+                                  "description": "**(UPDATED in 2.6.0)** HS/HTS Code. Shipments entering the US require a 10 digit HTS Code. Shipments entering the EU require an HS Code."
+                                },
+                                "country_of_origin": {
+                                  "type": "string",
+                                  "description": "ISO 3166-1 alpha-2 code for the country.",
+                                  "example": "CA"
+                                },
+                                "num_units": {
+                                  "type": "integer",
+                                  "example": 1
+                                },
+                                "unit_price": {
+                                  "$ref": "#/components/schemas/Money"
+                                },
+                                "description": {
+                                  "type": "string",
+                                  "description": "The description of the product. Maximum length of 35 characters for UPS"
+                                },
+                                "cusma_included": {
+                                  "type": "boolean",
+                                  "description": "**(NEW in 2.6.0)** Applies only to package and courier pak shipments from Canada to the US.\n\nIf true, you certify the goods meet CUSMA (USMCA) rules of origin and that a valid certification of origin is provided. If the carrier accepts paperless_customs_documents, a valid CUSMA document with type 'cusma-form' must be included in the paperless_customs_documents.\n"
+                                },
+                                "non_auto_parts": {
+                                  "type": "boolean",
+                                  "description": "**(NEW in 2.6.1)** Applies only to package and courier pak shipments from Canada to the US.\n\nIf the product's HTS Code implies it may contain auto parts, then you may receive additional tariffs.\n\nBy specifying true in this field, you certify that your product does **not** contain auto parts.\nThis will avoid any tariffs related to auto parts.\n\nIf this field is false or omitted, the product's HTS Code will determine whether you receive any tariffs related to auto parts.\n"
+                                },
+                                "fda_regulated": {
+                                  "type": "enum",
+                                  "description": "**(NEW in 2.6.2)** Applies only to package and courier pak shipments from Canada to the US.\nRequired for these shipments.\n\nPlease specify \"yes\" if this product is regulated by the U.S. Food and Drug Administration (FDA) and \"no\" if it is not.\n\nIf your shipment contains an FDA regulated product, some carriers will not accept it.\nBy specifying \"yes\", we can provide rates and book shipments only for carriers that will accept FDA regulated products.\n",
+                                  "enum": [
+                                    "yes",
+                                    "no"
+                                  ]
+                                },
+                                "product_composition_allocation": {
+                                  "type": "object",
+                                  "description": "**(NEW in 2.6.1)** Applies only to package and courier pak shipments from Canada to the US.\n\nIf your product contains steel/aluminum/copper, provide this object with the applicable allocation percentages.\nIf you do not provide these values, you may receive higher customs charges than necessary.\n\n`provided` must be set to true when you provide these values.\n\nTo specify zero steel/aluminum/copper allocation, you must either set `provided` to true, or set `product_composition_allocation_zero` to true in the parent object.\nIf `product_composition_allocation_zero` is true, this object will not affect rates and can be omitted.\n\nIf you specify a non-zero allocation and the carrier accepts `paperless_customs_documents`, a valid Steel/Aluminum/Copper document with type `\"product-composition-allocation-document\"` must be included in the `paperless_customs_documents`.\n",
+                                  "properties": {
+                                    "provided": {
+                                      "type": "boolean",
+                                      "description": "Defaults to false. Set to true to specify steel/aluminum/copper allocation percentages.\n\nDoes not affect rates if you have set `product_composition_allocation_zero` to true.\n\nIf both this field and `product_composition_allocation_zero` are omitted or false, then you are not specifying any steel/aluminum/copper allocation percentages, regardless of the percentage values in this object.\nAs a result, you may receive higher customs charges than necessary.\n"
+                                    },
+                                    "steel_percentage": {
+                                      "type": "number",
+                                      "description": "If your product contains steel, specify the percentage of steel that applies, where 0.5 means 50%. Defaults to 0 if omitted and if `provided` is true.\n\nMust be omitted or 0 if `provided` is false or if `product_composition_allocation_zero` is true.\n",
+                                      "minimum": 0,
+                                      "maximum": 1
+                                    },
+                                    "aluminum_percentage": {
+                                      "type": "number",
+                                      "description": "If your product contains aluminum, specify the percentage of aluminum that applies, where 0.5 means 50%. Defaults to 0 if omitted and if `provided` is true.\n\nMust be omitted or 0 if `provided` is false or if `product_composition_allocation_zero` is true.\n",
+                                      "minimum": 0,
+                                      "maximum": 1
+                                    },
+                                    "copper_percentage": {
+                                      "type": "number",
+                                      "description": "If your product contains copper, specify the percentage of copper that applies, where 0.5 means 50%. Defaults to 0 if omitted and if `provided` is true.\n\nMust be omitted or 0 if `provided` is false or if `product_composition_allocation_zero` is true.\n",
+                                      "minimum": 0,
+                                      "maximum": 1
+                                    }
+                                  }
+                                },
+                                "product_composition_allocation_zero": {
+                                  "type": "boolean",
+                                  "description": "**(NEW in 2.6.1)** Applies only to package and courier pak shipments from Canada to the US.\n\nOptional field that defaults to false. If true, you certify that your product's composition allocation percentages are all 0%.\n\nFor simplicity, you may choose to ignore this field and always explicitly specify your product's composition allocation percentages, as long as you specify `product_composition_allocation.provided` true.\n\nIf this field is true, the `product_composition_allocation` object will not affect rates. However, if you specify a non-zero allocation percentage, you will receive an error.\n"
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  },
+                  "pickup_details": {
+                    "$ref": "#/components/schemas/PickupDetails"
+                  },
+                  "dispatch_details": {
+                    "$ref": "#/components/schemas/DispatchDetails"
+                  },
+                  "paperless_customs_documents": {
+                    "type": "array",
+                    "description": "**(NEW in 2.6.0)** Paperless customs documents to upload to the carrier, if supported.\n\nCurrently, we support paperless customs documents for international shipments with paperless rates from FedEx Courier and UPS. Each carrier limits the number of files that can be uploaded:\n\n- FedEx Courier: up to 5 files may be uploaded.\n- UPS: up to 13 files may be uploaded.\n\nA paperless customs invoice is created automatically: it is not necessary to upload one. The paperless customs invoice does not count towards the maximum # of files that may be uploaded.\n\nSince an API request is limited to at most 6 MB, and files must be Base64 encoded, this puts an upper limit of approximately 4.5 MB (before Base64 encoding) on the total size of all files that may be uploaded in a single request.\n",
+                    "items": {
+                      "type": "object",
+                      "required": [
+                        "type",
+                        "file_name",
+                        "file_base64"
+                      ],
+                      "properties": {
+                        "type": {
+                          "type": "string",
+                          "description": "The document's type. Allowed types depend on the carrier.\n\nIf you have specified cusma_included true on one or more of your customs products, then you must upload a document with type 'cusma-form'.\nIf you have specified a non-zero steel/aluminum/copper allocation on one or more of your customs products, then you must upload a document with type 'product-composition-allocation-document'.\n\n**Valid document types for FedEx Courier shipments**\n\n| type                                    | Description                         |\n| --------------------------------------- | ----------------------------------- |\n| certificate-of-origin                   | Certificate of Origin               |\n| cusma-form                              | CUSMA Certificate                   |\n| customs-invoice                         | Customs Invoice                     |\n| fda-prior-notice                        | FDA Prior Notice                    |\n| lacey-act-form                          | Lacey Act Declaration               |\n| packing-slip                            | Packing Slip                        |\n| pro-forma-invoice                       | Pro Forma Invoice                   |\n| product-composition-allocation-document | Steel/Aluminum/Copper Documentation |\n| tsca                                    | TSCA Declaration                    |\n| other                                   | Other Documents                     |\n\n**Valid document types for UPS shipments**\n\n| type                                    | Description                         |\n| --------------------------------------- | ----------------------------------- |\n| authorization-form                      | Authorization Form                  |\n| certificate-of-origin                   | Certificate of Origin               |\n| cusma-form                              | CUSMA Certificate                   |\n| customs-invoice                         | Customs Invoice                     |\n| declaration                             | Declaration                         |\n| export-accompanying-document            | Export Accompanying Document        |\n| export-license                          | Export License                      |\n| fda-prior-notice                        | FDA Prior Notice                    |\n| import-permit                           | Import Permit                       |\n| lacey-act-form                          | Lacey Act Declaration               |\n| one-time-nafta                          | One Time NAFTA                      |\n| packing-slip                            | Packing Slip                        |\n| power-of-attorney                       | Power Of Attorney                   |\n| product-composition-allocation-document | Steel/Aluminum/Copper Documentation |\n| sed-document                            | SED Document                        |\n| shippers-letter-of-instruction          | Shipper's Letter Of Instruction     |\n| tsca                                    | TSCA Declaration                    |\n| other                                   | Other Documents                     |\n",
+                          "enum": [
+                            "cusma-form",
+                            "product-composition-allocation-document",
+                            "authorization-form",
+                            "certificate-of-origin",
+                            "customs-invoice",
+                            "declaration",
+                            "export-accompanying-document",
+                            "export-license",
+                            "fda-prior-notice",
+                            "import-permit",
+                            "lacey-act-form",
+                            "one-time-nafta",
+                            "packing-slip",
+                            "power-of-attorney",
+                            "pro-forma-invoice",
+                            "sed-document",
+                            "shippers-letter-of-instruction",
+                            "tsca",
+                            "other"
+                          ]
+                        },
+                        "type_other_name": {
+                          "type": "string",
+                          "description": "If the document's type is 'other', then this field is the document's name and is required. If the document's type is not 'other', then this field must be left empty."
+                        },
+                        "file_name": {
+                          "type": "string",
+                          "description": "The document's file name, including its extension. A carrier may allow specific file extensions only, and the file's contents should match its extension."
+                        },
+                        "file_base64": {
+                          "type": "string",
+                          "description": "The document file, encoded as Base64. The maximum total size of all files in a request is approximately 4.5 MB (before Base64 encoding)."
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Success result with the shipment ID.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "description": "Shipment ID."
+                    },
+                    "previously_created": {
+                      "type": "boolean",
+                      "description": "true if the shipment was previously created with a matching unique_id."
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/shipment/{shipment_id}": {
+      "get": {
+        "description": "Retrieve details on a shipment.",
+        "tags": [
+          "shipment",
+          "2.6.2 changes",
+          "2.6.1 changes",
+          "2.6.0 changes"
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "shipment_id",
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "description": "The shipment ID to retrieve details on."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Details on the shipment.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "shipment": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "description": "Shipment ID."
+                        },
+                        "unique_id": {
+                          "type": "string",
+                          "description": "Unique ID associated with the shipment."
+                        },
+                        "state": {
+                          "type": "string",
+                          "description": "State that the shipment is in.",
+                          "enum": [
+                            "draft",
+                            "waiting-for-transit",
+                            "in-transit",
+                            "delivered",
+                            "exception",
+                            "missing",
+                            "cancelled"
+                          ]
+                        },
+                        "transaction_number": {
+                          "type": "string",
+                          "description": "Transaction number from shipment"
+                        },
+                        "primary_tracking_number": {
+                          "type": "string",
+                          "description": "Primary tracking number for the shipment"
+                        },
+                        "tracking_numbers": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          },
+                          "description": "Tracking numbers for shipment"
+                        },
+                        "tracking_url": {
+                          "type": "string",
+                          "description": "External tracking URL for shipment"
+                        },
+                        "return_tracking_number": {
+                          "type": "string",
+                          "description": "Return tracking number for shipment if available"
+                        },
+                        "bol_number": {
+                          "type": "string",
+                          "description": "BOL number for shipment"
+                        },
+                        "pickup_confirmation_number": {
+                          "type": "string",
+                          "description": "Pickup confirmation number for shipment"
+                        },
+                        "details": {
+                          "$ref": "#/components/schemas/ShippingDetails"
+                        },
+                        "transport_data": {
+                          "type": "object",
+                          "description": "Additional transport data for the shipment"
+                        },
+                        "labels": {
+                          "type": "array",
+                          "description": "Labels for the shipment",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "size": {
+                                "type": "string",
+                                "enum": [
+                                  "letter",
+                                  "a6"
+                                ]
+                              },
+                              "format": {
+                                "type": "string",
+                                "enum": [
+                                  "pdf",
+                                  "zpl"
+                                ]
+                              },
+                              "url": {
+                                "type": "string"
+                              },
+                              "padded": {
+                                "type": "boolean",
+                                "description": "If padded is true there can be padding added to offset the label to avoid being cut off when printing."
+                              }
+                            }
+                          }
+                        },
+                        "customs_invoice_url": {
+                          "type": "string",
+                          "description": "URL of customs invoice if uploaded or generated."
+                        },
+                        "rate": {
+                          "$ref": "#/components/schemas/Rate"
+                        },
+                        "order_source": {
+                          "type": "string",
+                          "description": "Order source for shipment"
+                        },
+                        "paperless_customs_documents": {
+                          "type": "array",
+                          "description": "**(NEW in 2.6.0)** Paperless customs documents that were successfully uploaded to the carrier.",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "description": "The document's ID."
+                              },
+                              "type": {
+                                "type": "string",
+                                "description": "The document's type."
+                              },
+                              "type_other_name": {
+                                "type": "string",
+                                "description": "If the document's type is 'other', then this is the document's name."
+                              },
+                              "file_name": {
+                                "type": "string",
+                                "description": "The document's file name, including its extension."
+                              },
+                              "url": {
+                                "type": "string",
+                                "description": "A URL to download the file. Valid for only 1 hour."
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "Shipment is currently in the process of being booked. Please try again shortly."
+          },
+          "400": {
+            "$ref": "#/components/responses/BadData"
+          }
+        }
+      },
+      "delete": {
+        "description": "Cancel a shipment. Will also remove any unique_id association with the shipment.",
+        "tags": [
+          "shipment"
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "shipment_id",
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "description": "The shipment ID to cancel."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Shipment cancelled."
+          }
+        }
+      }
+    },
+    "/shipment/{shipment_id}/tracking-events": {
+      "get": {
+        "description": "Retrieve tracking events for a shipment.",
+        "tags": [
+          "shipment"
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "shipment_id",
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "description": "The shipment ID to retrieve details on."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Shipment tracking events.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "events": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "label-created",
+                              "ready-to-dispatch",
+                              "dispatched",
+                              "picked-up",
+                              "in-transit",
+                              "out-for-delivery",
+                              "delivered",
+                              "customs-hold",
+                              "customs-cleared",
+                              "cancelled",
+                              "exception",
+                              "missing"
+                            ]
+                          },
+                          "when": {
+                            "type": "string",
+                            "description": "in UTC"
+                          },
+                          "where": {
+                            "type": "object",
+                            "properties": {
+                              "city": {
+                                "type": "string"
+                              },
+                              "region": {
+                                "type": "string"
+                              },
+                              "country": {
+                                "type": "string"
+                              }
+                            }
+                          },
+                          "message": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/shipment/{shipment_id}/schedule": {
+      "get": {
+        "description": "Get details on scheduling.",
+        "tags": [
+          "shipment"
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "shipment_id",
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "description": "The shipment ID to get the scheduling status."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Current scheduling status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "pending",
+                        "timed-out",
+                        "error",
+                        "done"
+                      ]
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "pickup_confirmation_number": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Shipment scheduling information not found."
+          },
+          "404": {
+            "description": "Shipment not found."
+          }
+        }
+      },
+      "post": {
+        "description": "Schedule a dispatch or pickup.",
+        "tags": [
+          "shipment"
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "shipment_id",
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "description": "The shipment ID to schedule."
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "pickup_details": {
+                    "$ref": "#/components/schemas/PickupDetails"
+                  },
+                  "dispatch_details": {
+                    "$ref": "#/components/schemas/DispatchDetails"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Scheduling is being attempted. Check shipment details to determine if state has changed."
+          }
+        }
+      },
+      "delete": {
+        "description": "Cancel a scheduling.",
+        "tags": [
+          "shipment"
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "shipment_id",
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "description": "The shipment ID to cancel scheduling for."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Shipment scheduling cancelled."
+          }
+        }
+      }
+    },
+    "/finance/payment-methods": {
+      "get": {
+        "description": "Get the payment methods available for your account.",
+        "tags": [
+          "finance"
+        ],
+        "responses": {
+          "200": {
+            "description": "All payment methods on file.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "description": "Payment method ID."
+                    },
+                    "type": {
+                      "type": "string",
+                      "description": "The payment method type.",
+                      "enum": [
+                        "credit-card",
+                        "net-terms"
+                      ]
+                    },
+                    "label": {
+                      "type": "string",
+                      "description": "The label as assigned through the customer portal."
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/finance/documents": {
+      "get": {
+        "description": "Get a list of documents in a date range.",
+        "tags": [
+          "finance"
+        ],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "start_date",
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "description": "The start date in UTC to search in.",
+            "example": "2021-07-01"
+          },
+          {
+            "in": "query",
+            "name": "end_date",
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "description": "The end date in UTC.",
+            "example": "2021-07-31"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Documents in the time range.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "description": "Invoice ID."
+                    },
+                    "type": {
+                      "type": "string",
+                      "description": "The invoice type."
+                    },
+                    "number": {
+                      "type": "string",
+                      "description": "Number for the invoice."
+                    },
+                    "date": {
+                      "$ref": "#/components/schemas/Date"
+                    },
+                    "due_date": {
+                      "$ref": "#/components/schemas/Date"
+                    },
+                    "amount": {
+                      "$ref": "#/components/schemas/Money"
+                    },
+                    "owing": {
+                      "$ref": "#/components/schemas/Money"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/finance/document/{document_id}": {
+      "get": {
+        "description": "Get a particular document with details.",
+        "tags": [
+          "finance"
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "document_id",
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "description": "The document to retrieve details on."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Document with details.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    },
+                    "number": {
+                      "type": "string"
+                    },
+                    "date": {
+                      "$ref": "#/components/schemas/Date"
+                    },
+                    "due_date": {
+                      "$ref": "#/components/schemas/Date"
+                    },
+                    "amount": {
+                      "$ref": "#/components/schemas/Money"
+                    },
+                    "owing": {
+                      "$ref": "#/components/schemas/Money"
+                    },
+                    "urls": {
+                      "type": "object",
+                      "description": "URLs where the PDF of the document can be downloaded."
+                    },
+                    "payments": {
+                      "type": "array",
+                      "description": "Payments made on the document.",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "type": {
+                            "type": "string"
+                          },
+                          "amount": {
+                            "$ref": "#/components/schemas/Money"
+                          },
+                          "data": {
+                            "type": "object",
+                            "properties": {
+                              "credit_card_auth": {
+                                "type": "string"
+                              },
+                              "credit_card_number": {
+                                "type": "string"
+                              },
+                              "credit_card_reference": {
+                                "type": "string"
+                              }
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "line_items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "base",
+                              "surcharge",
+                              "tax"
+                            ]
+                          },
+                          "sub_type": {
+                            "type": "string"
+                          },
+                          "payment_id": {
+                            "type": "string"
+                          },
+                          "amount": {
+                            "$ref": "#/components/schemas/Money"
+                          },
+                          "message": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/finance/invoices-for-shipment-id/{shipment_id}": {
+      "get": {
+        "description": "Get invoices for the shipment id",
+        "tags": [
+          "finance"
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "shipment_id",
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "description": "The shipment id to retrieve invoices for."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Documents with details.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "type": {
+                        "type": "string"
+                      },
+                      "number": {
+                        "type": "string"
+                      },
+                      "date": {
+                        "$ref": "#/components/schemas/Date"
+                      },
+                      "due_date": {
+                        "$ref": "#/components/schemas/Date"
+                      },
+                      "amount": {
+                        "$ref": "#/components/schemas/Money"
+                      },
+                      "owing": {
+                        "$ref": "#/components/schemas/Money"
+                      },
+                      "urls": {
+                        "type": "object",
+                        "description": "URLs where the PDF of the document can be downloaded."
+                      },
+                      "payments": {
+                        "type": "array",
+                        "description": "Payments made on the document.",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "type": {
+                              "type": "string"
+                            },
+                            "amount": {
+                              "$ref": "#/components/schemas/Money"
+                            },
+                            "data": {
+                              "type": "object",
+                              "properties": {
+                                "credit_card_auth": {
+                                  "type": "string"
+                                },
+                                "credit_card_number": {
+                                  "type": "string"
+                                },
+                                "credit_card_reference": {
+                                  "type": "string"
+                                }
+                              }
+                            }
+                          }
+                        }
+                      },
+                      "line_items": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "base",
+                                "surcharge",
+                                "tax"
+                              ]
+                            },
+                            "sub_type": {
+                              "type": "string"
+                            },
+                            "payment_id": {
+                              "type": "string"
+                            },
+                            "amount": {
+                              "$ref": "#/components/schemas/Money"
+                            },
+                            "message": {
+                              "type": "string"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/finance/invoices-for-transaction-number/{transaction_number}": {
+      "get": {
+        "description": "Get invoices for the shipment transaction number",
+        "tags": [
+          "finance"
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "transaction_number",
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "description": "The transaction number to retrieve invoices for."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Documents with details.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "type": {
+                        "type": "string"
+                      },
+                      "number": {
+                        "type": "string"
+                      },
+                      "date": {
+                        "$ref": "#/components/schemas/Date"
+                      },
+                      "due_date": {
+                        "$ref": "#/components/schemas/Date"
+                      },
+                      "amount": {
+                        "$ref": "#/components/schemas/Money"
+                      },
+                      "owing": {
+                        "$ref": "#/components/schemas/Money"
+                      },
+                      "urls": {
+                        "type": "object",
+                        "description": "URLs where the PDF of the document can be downloaded."
+                      },
+                      "payments": {
+                        "type": "array",
+                        "description": "Payments made on the document.",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "type": {
+                              "type": "string"
+                            },
+                            "amount": {
+                              "$ref": "#/components/schemas/Money"
+                            },
+                            "data": {
+                              "type": "object",
+                              "properties": {
+                                "credit_card_auth": {
+                                  "type": "string"
+                                },
+                                "credit_card_number": {
+                                  "type": "string"
+                                },
+                                "credit_card_reference": {
+                                  "type": "string"
+                                }
+                              }
+                            }
+                          }
+                        }
+                      },
+                      "line_items": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "base",
+                                "surcharge",
+                                "tax"
+                              ]
+                            },
+                            "sub_type": {
+                              "type": "string"
+                            },
+                            "payment_id": {
+                              "type": "string"
+                            },
+                            "amount": {
+                              "$ref": "#/components/schemas/Money"
+                            },
+                            "message": {
+                              "type": "string"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/services": {
+      "get": {
+        "description": "Get the services available.",
+        "tags": [
+          "service"
+        ],
+        "responses": {
+          "200": {
+            "description": "Services available to the customer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "services": {
+                      "type": "array",
+                      "description": "Service IDs and descriptions.",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "carrier_name": {
+                            "type": "string"
+                          },
+                          "service_name": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/manifest": {
+      "post": {
+        "description": "Initiate a manifest request.",
+        "tags": [
+          "manifest"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "carrier_id": {
+                    "type": "string"
+                  },
+                  "manifest_data": {
+                    "description": "Contains additional data that can be used to filter or limit the manifest request. Specific fields required depending upon the carrier.",
+                    "type": "object",
+                    "properties": {
+                      "tracking_numbers": {
+                        "type": "array",
+                        "description": "The shipment details to get based on tracking numbers. If empty then manifest_date will be used instead.",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "manifest_date": {
+                        "$ref": "#/components/schemas/Date"
+                      },
+                      "origin_postal_code": {
+                        "type": "string",
+                        "description": "Used when generating manifest by shipping point."
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Manifest generation initiated.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "request_id": {
+                      "type": "string",
+                      "description": "The manifest ID."
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/manifest/{manifest_id}": {
+      "get": {
+        "description": "Get the results of a manifest request.",
+        "tags": [
+          "manifest"
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "manifest_id",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Result of the manifest request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "url": {
+                      "type": "string",
+                      "description": "URL of the manifest, if one was generated, for downloading."
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "The request is pending, please try again shortly."
+          }
+        }
+      }
+    },
+    "/freight-class/calculate": {
+      "post": {
+        "summary": "Calculate freight class",
+        "description": "Calculate freight class for pallet dimensions.",
+        "tags": [
+          "rate"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "box": {
+                    "$ref": "#/components/schemas/Box"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Freight class calculated.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "freight_class": {
+                      "type": "string",
+                      "description": "Freight class calculated.",
+                      "example": "50"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
