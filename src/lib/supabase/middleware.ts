@@ -28,12 +28,11 @@ export async function updateSupabaseSession(
         return request.cookies.getAll();
       },
       setAll(cookiesToSet) {
-        cookiesToSet.forEach(({ name, value }) =>
-          request.cookies.set(name, value)
-        );
+        // Ne pas appeler request.cookies.set ici : sur Vercel Edge / Next récents cela peut lever
+        // une exception → 500 MIDDLEWARE_INVOCATION_FAILED. Les cookies session passent par la réponse.
         supabaseResponse = NextResponse.next({ request });
         cookiesToSet.forEach(({ name, value, options }) =>
-          supabaseResponse.cookies.set(name, value, options)
+          supabaseResponse.cookies.set(name, value, options),
         );
       },
     },
