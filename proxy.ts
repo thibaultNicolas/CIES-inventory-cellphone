@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-// Imports relatifs requis : les alias @/ dans le middleware Edge peuvent échouer sur Vercel.
+// Imports relatifs requis : les alias @/ dans le proxy peuvent échouer sur Vercel.
 import { updateSupabaseSession } from "./src/lib/supabase/middleware";
 import { parseAppRole, hasMinRole, type AppRole } from "./src/lib/app-role";
 
@@ -18,14 +18,14 @@ function isPublicPath(pathname: string): boolean {
   // Fichiers statiques courants
   if (
     /\.(ico|webp|png|jpg|jpeg|svg|gif|txt|xml|webmanifest|json)$/i.test(
-      pathname
+      pathname,
     )
   ) {
     return true;
   }
   if (pathname === "/robots.txt" || pathname === "/sitemap.xml") return true;
 
-  // Site public (rachat, pages légales, locale EN)
+  // Site public (rachat, pages légales, locales FR/EN)
   if (pathname === "/" || pathname === "/merci") return true;
   if (pathname.startsWith("/rachat")) return true;
   for (const root of PUBLIC_ROOTS) {
@@ -54,7 +54,7 @@ function forbiddenRedirect(request: NextRequest) {
   return NextResponse.redirect(url);
 }
 
-export async function middleware(request: NextRequest) {
+export default async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   const { supabaseResponse, user } = await updateSupabaseSession(request);
@@ -92,7 +92,6 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: [
-    "/((?!_next/static|_next/image|favicon\\.ico|favicon\\.webp).*)",
-  ],
+  matcher: ["/((?!_next/static|_next/image|favicon\\.ico|favicon\\.webp).*)"],
 };
+
