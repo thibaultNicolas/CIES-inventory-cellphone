@@ -54,7 +54,7 @@ function forbiddenRedirect(request: NextRequest) {
   return NextResponse.redirect(url);
 }
 
-export default async function proxy(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   const { supabaseResponse, user } = await updateSupabaseSession(request);
