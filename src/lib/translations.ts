@@ -20,7 +20,8 @@ export const translations = {
     home: {
       tagline: "Rachat de cellulaires",
       title: "💰 Vendez votre cellulaire en toute simplicité.",
-      titleLine2: "Recevez votre paiement à l'intérieur de 48h après réception.",
+      titleLine2:
+        "Recevez votre paiement à l'intérieur de 48h après réception.",
       description:
         "Évaluation gratuite en 60 secondes. Expédition offerte. Paiement Interac garanti.",
       cta: "Démarrer mon évaluation",
@@ -49,8 +50,7 @@ export const translations = {
       step3: {
         number: "03",
         title: "Paiement rapide par virement Interac",
-        description:
-          "Paiement envoyé sous 24–48h après réception.",
+        description: "Paiement envoyé sous 24–48h après réception.",
       },
       ctaSection: {
         ready: "Prêt à commencer?",
@@ -64,13 +64,11 @@ export const translations = {
         points: [
           {
             title: "Expertise locale",
-            description:
-              "Un service fier d'être 100 % québécois et Canadien.",
+            description: "Un service fier d'être 100 % québécois et Canadien.",
           },
           {
             title: "Fiabilité prouvée",
-            description:
-              "Déjà plus de 5000 appareils rachetés avec succès.",
+            description: "Déjà plus de 5000 appareils rachetés avec succès.",
           },
           {
             title: "Honnêteté totale",
@@ -210,8 +208,6 @@ export const translations = {
     // Footer
     footer: {
       copyright: "© 2026 AcheteTonCell. Tous droits réservés.",
-      privacy: "Politique de confidentialité",
-      terms: "Termes et conditions",
       usefulLinks: "Liens utiles",
       tradeInRequest: "Demande de rachat",
       fourDayPayout: "Réponse en 4 jours",
@@ -256,21 +252,6 @@ export const translations = {
         responsiblePhone: "1-833-803-2023",
       },
     },
-    // Cookie Banner
-    cookie: {
-      title: "Cookies et confidentialité",
-      description:
-        "Nous utilisons des cookies pour améliorer votre expérience et analyser notre trafic. Vous pouvez accepter ou refuser les cookies non essentiels.",
-      learnMore: "En savoir plus",
-      accept: "Accepter",
-      reject: "Refuser",
-    },
-    // Privacy Policy
-    privacy: {
-      title: "Politique de confidentialité",
-      lastUpdated: "Dernière mise à jour",
-      // Sections will be added as needed
-    },
     // Wizard
     wizard: {
       step1: "Étape 1 sur 4",
@@ -290,7 +271,7 @@ export const translations = {
       continue: "Continuer",
       cta: {
         acceptAndAddAnotherDevice: "Accepter et ajouter un autre appareil",
-        getPaid: "Confirmer et recevoir mon paiement",
+        getPaid: "Procéder au rachat",
       },
       capacity: "Capacité",
       deviceConditionLabel: "État de l'appareil",
@@ -336,17 +317,10 @@ export const translations = {
         uploadSuccess: "Uploadée avec succès",
         uploading: "Upload en cours...",
         dragDrop: "Glissez-déposez une image ou cliquez pour sélectionner",
-        privacyAccept:
-          "J'accepte que mes données soient traitées conformément à la",
-        privacyPolicy: "Politique de Confidentialité",
-        privacyAcceptEnd: "pour finaliser ma demande de rachat.",
-        dataCollectionNotice:
-          "Vos renseignements sont collectés pour le traitement du rachat (magasin et client), la conformité et le suivi de la transaction. Ils sont hébergés de manière sécurisée et ne seront jamais vendus.",
-        consentCheckbox:
-          "Je consens à la collecte de mes renseignements personnels selon la Politique de Confidentialité.",
         submit: "Vendre mon appareil",
         submitting: "Envoi en cours...",
-        submitError: "Une erreur est survenue lors de l'envoi de votre demande.",
+        submitError:
+          "Une erreur est survenue lors de l'envoi de votre demande.",
         requiredPhotos:
           "Veuillez ajouter les 3 photos (devant, derrière, batterie) pour finaliser votre demande",
         canadaOnlyAddress:
@@ -356,24 +330,19 @@ export const translations = {
       estimatedValueLabel: "Valeur estimée :",
       conditionLabel: "État",
       quantityLabel: "Quantité",
-      acceptPrivacyAlert:
-        "Veuillez accepter la politique de confidentialité pour continuer.",
       addOneDevice: "Ajoutez au moins un appareil à votre demande.",
       searchingAddresses: "Recherche d'adresses...",
       yourRequest: "Votre demande",
       devicesCount: "appareil(s)",
       removeDevice: "Retirer l'appareil",
-      shippingProtectionTitle: "Protection d'expédition (optionnelle)",
-      shippingProtectionDescription:
-        "Votre envoi inclut déjà une couverture gratuite jusqu'à 100 $. Si vous souhaitez une protection supplémentaire, vous pouvez ajouter une couverture jusqu'à la valeur totale de votre commande en cas de perte ou de dommage pendant le transport (réclamation sujette à approbation). Les frais de protection seront déduits de votre offre.",
-      addInsurance: "Ajouter une assurance (-27.99$)",
-      insurance: "Assurance",
       googleMapsKeyMissing:
         "Google Maps API key manquante (NEXT_PUBLIC_GOOGLE_MAPS_API_KEY).",
     },
     // Success page (post-submit)
     success: {
       rachat: "Rachat",
+      confirmationMessage:
+        "Merci, nous confirmons avoir procédé à l'inscription de votre rachat.",
       done: "C'est fait !",
       messageIntro: "Votre demande a été enregistrée avec succès.",
       messageEmail:
@@ -381,10 +350,6 @@ export const translations = {
       orderNumber: "Numéro de commande",
       date: "Date",
       totalPayout: "Paiement total",
-      shippingProtection: "Protection d'expédition",
-      insuranceFee: "Frais d'assurance",
-      yes: "Oui",
-      no: "Non",
       orderDetails: "Détails de la commande",
       product: "Produit",
       total: "Total",
@@ -416,11 +381,11 @@ export const translations = {
     // Admin
     admin: {
       administration: "Administration",
+      backToRachatHome: "Retour au rachat",
       accounts: "Comptes",
       tradeInRequests: "Demandes de rachat",
       commissions: "Commissions",
       products: "Produits",
-      incidents: "Incidents (Loi 25)",
       filters: "Filtres :",
       period: "Période :",
       allPeriods: "Toutes les périodes",
@@ -465,7 +430,6 @@ export const translations = {
       summaryTitle: "Résumé",
       itemsLabel: "Articles",
       subtotalLabel: "Sous-total",
-      insuranceFeeLabel: "Frais d'assurance",
       totalLabel: "Total",
       shippingTitle: "Expédition",
       trackingNumber: "Numéro de suivi",
@@ -493,7 +457,6 @@ export const translations = {
       priceUpdateInvalidPrice: "Prix invalide.",
       priceUpdateReasonRequired: "Veuillez indiquer une raison.",
       priceUpdateError: "Erreur lors de la mise à jour du prix",
-      shippingProtection: "Protection",
       status: "Statut",
       commissionPaid: "Commission payée",
       actions: "Actions",
@@ -545,10 +508,6 @@ export const translations = {
       modelsLabel: "modèle",
       modelsLabelPlural: "modèles",
       pricesLabel: "prix",
-      incidentsTitle: "Incidents (Loi 25)",
-      incidentsRegister: "Registre des Incidents",
-      incidentsSubtitle:
-        "Documentation des incidents de confidentialité (Loi 25)",
     },
   },
   en: {
@@ -597,8 +556,7 @@ export const translations = {
       step3: {
         number: "03",
         title: "Fast payment by Interac transfer",
-        description:
-          "Payment sent within 24–48h after we receive your device.",
+        description: "Payment sent within 24–48h after we receive your device.",
       },
       ctaSection: {
         ready: "Ready to get started?",
@@ -612,13 +570,11 @@ export const translations = {
         points: [
           {
             title: "Local expertise",
-            description:
-              "A service proud to be 100% Quebec and Canadian.",
+            description: "A service proud to be 100% Quebec and Canadian.",
           },
           {
             title: "Proven reliability",
-            description:
-              "Over 5000 devices successfully bought back.",
+            description: "Over 5000 devices successfully bought back.",
           },
           {
             title: "Total honesty",
@@ -627,13 +583,11 @@ export const translations = {
           },
           {
             title: "Fast payment",
-            description:
-              "Your money is sent directly by Interac transfer.",
+            description: "Your money is sent directly by Interac transfer.",
           },
           {
             title: "We're here for you",
-            description:
-              "Enjoy personalized human support—no bots.",
+            description: "Enjoy personalized human support—no bots.",
           },
         ],
         phone: "1-833-803-2023",
@@ -748,8 +702,7 @@ export const translations = {
           },
           {
             question: "Is shipping really free?",
-            answer:
-              "Yes, we send you a prepaid Canada Post label.",
+            answer: "Yes, we send you a prepaid Canada Post label.",
           },
         ],
       },
@@ -757,8 +710,6 @@ export const translations = {
     // Footer
     footer: {
       copyright: "© 2026 AcheteTonCell. All rights reserved.",
-      privacy: "Privacy Policy",
-      terms: "Terms and Conditions",
       usefulLinks: "Useful links",
       tradeInRequest: "Trade-in request",
       fourDayPayout: "4-day payout",
@@ -801,20 +752,6 @@ export const translations = {
         responsiblePhone: "1-833-803-2023",
       },
     },
-    // Cookie Banner
-    cookie: {
-      title: "Cookies and privacy",
-      description:
-        "We use cookies to improve your experience and analyze our traffic. You can accept or refuse non-essential cookies.",
-      learnMore: "Learn more",
-      accept: "Accept",
-      reject: "Reject",
-    },
-    // Privacy Policy
-    privacy: {
-      title: "Privacy Policy",
-      lastUpdated: "Last updated",
-    },
     // Wizard
     wizard: {
       step1: "Step 1 of 4",
@@ -833,8 +770,8 @@ export const translations = {
       back: "Back",
       continue: "Continue",
       cta: {
-        acceptAndAddAnotherDevice: "Accept & add another device",
-        getPaid: "Get Paid",
+        acceptAndAddAnotherDevice: "Accept",
+        getPaid: "Proceed with the buyout",
       },
       capacity: "Capacity",
       deviceConditionLabel: "Device condition",
@@ -867,8 +804,7 @@ export const translations = {
         clientCityPlaceholder: "e.g. Montreal",
         deviceImei: "Phone IMEI",
         deviceImeiPlaceholder: "Usually 15 digits",
-        deviceImeiHint:
-          "IMEI / unique device identifier (often 15 digits).",
+        deviceImeiHint: "IMEI / unique device identifier (often 15 digits).",
         fullName: "Full name",
         email: "Email",
         phone: "Phone",
@@ -880,41 +816,30 @@ export const translations = {
         uploadSuccess: "Uploaded successfully",
         uploading: "Uploading...",
         dragDrop: "Drag and drop an image or click to select",
-        privacyAccept:
-          "I accept that my data be processed in accordance with the",
-        privacyPolicy: "Privacy Policy",
-        privacyAcceptEnd: "to finalize my trade-in request.",
-        dataCollectionNotice:
-          "Your information is collected to process the trade-in (store and customer), compliance, and transaction follow-up. It is securely hosted and will never be sold.",
-        consentCheckbox:
-          "I consent to the collection of my personal information according to the Privacy Policy.",
         submit: "Sell my device",
         submitting: "Submitting...",
         submitError: "Something went wrong while submitting your request.",
         requiredPhotos:
           "Please add the 3 photos (front, back, battery) to finalize your request",
-        canadaOnlyAddress: "Invalid address: we only accept Canadian addresses.",
+        canadaOnlyAddress:
+          "Invalid address: we only accept Canadian addresses.",
       },
       fromPrice: "From",
       estimatedValueLabel: "Estimated value:",
       conditionLabel: "Condition",
       quantityLabel: "Quantity",
-      acceptPrivacyAlert: "Please accept the privacy policy to continue.",
       addOneDevice: "Add at least one device to your request.",
       searchingAddresses: "Searching addresses...",
       yourRequest: "Your request",
       devicesCount: "device(s)",
       removeDevice: "Remove device",
-      shippingProtectionTitle: "Shipping Protection (Optional)",
-      shippingProtectionDescription:
-        "Your shipment already includes free coverage up to $100. If you want extra protection, you can add coverage up to the full value of your order for loss or transit damage (claims subject to approval). The protection fee will be deducted from your offer.",
-      addInsurance: "Add insurance (-$27.99)",
-      insurance: "Insurance",
       googleMapsKeyMissing:
         "Google Maps API key missing (NEXT_PUBLIC_GOOGLE_MAPS_API_KEY).",
     },
     success: {
       rachat: "Trade-in",
+      confirmationMessage:
+        "Thank you — we confirm that your trade-in has been registered.",
       done: "Done!",
       messageIntro: "Your request has been successfully recorded.",
       messageEmail:
@@ -922,16 +847,13 @@ export const translations = {
       orderNumber: "Order Number",
       date: "Date",
       totalPayout: "Total Payout",
-      shippingProtection: "Shipping protection",
-      insuranceFee: "Insurance fee",
-      yes: "Yes",
-      no: "No",
       orderDetails: "Order details",
       product: "Product",
       total: "Total",
       totalPayoutLabel: "Total payout:",
       shippingTitle: "Shipping",
-      shippingLabelManual: "Our team will contact you with shipping instructions.",
+      shippingLabelManual:
+        "Our team will contact you with shipping instructions.",
       trackingNumber: "Tracking number",
       reviewInstructions: "Our team will contact you for the next steps.",
       emailInstructions:
@@ -953,11 +875,11 @@ export const translations = {
     },
     admin: {
       administration: "Administration",
+      backToRachatHome: "Back to trade-in",
       accounts: "Accounts",
       tradeInRequests: "Trade-in requests",
       commissions: "Commissions",
       products: "Products",
-      incidents: "Incidents (Law 25)",
       filters: "Filters:",
       period: "Period:",
       allPeriods: "All periods",
@@ -1002,7 +924,6 @@ export const translations = {
       summaryTitle: "Summary",
       itemsLabel: "Items",
       subtotalLabel: "Subtotal",
-      insuranceFeeLabel: "Insurance fee",
       totalLabel: "Total",
       shippingTitle: "Shipping",
       trackingNumber: "Tracking number",
@@ -1030,7 +951,6 @@ export const translations = {
       priceUpdateInvalidPrice: "Invalid price.",
       priceUpdateReasonRequired: "Please provide a reason.",
       priceUpdateError: "Error updating price",
-      shippingProtection: "Protection",
       status: "Status",
       commissionPaid: "Commission paid",
       actions: "Actions",
@@ -1082,9 +1002,6 @@ export const translations = {
       modelsLabel: "model",
       modelsLabelPlural: "models",
       pricesLabel: "prices",
-      incidentsTitle: "Incidents (Law 25)",
-      incidentsRegister: "Incident Register",
-      incidentsSubtitle: "Documentation of privacy incidents (Law 25)",
     },
   },
 } as const;

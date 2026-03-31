@@ -1,30 +1,30 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useI18n } from "@/contexts/I18nContext";
 import { LanguageSwitcher } from "../../components/LanguageSwitcher";
 import { LogoutButton } from "../../components/LogoutButton";
 import { AdminSidebar } from "./AdminSidebar";
 import { AdminUsersTable } from "./AdminUsersTable";
-import { SubmissionsTableWithFilters } from "./SubmissionsTableWithFilters";
 import { OrdersTable, type OrderSummary } from "./OrdersTable";
 import { OrderDetail } from "./OrderDetail";
 import { ProductsManager } from "./ProductsManager";
-import { IncidentLogsTable } from "./IncidentLogsTable";
 import { CommissionsDashboard } from "./CommissionsDashboard";
-import { Menu, X, Users, ShoppingBag, Package, AlertTriangle, DollarSign } from "lucide-react";
+import {
+  ArrowLeft,
+  Menu,
+  X,
+  Users,
+  ShoppingBag,
+  Package,
+  DollarSign,
+} from "lucide-react";
 import type { SubmissionStatus } from "@/lib/submissions";
 import type { AppRole } from "@/lib/app-role";
 
-type AdminSection =
-  | "comptes"
-  | "demandes"
-  | "produits"
-  | "incidents"
-  | "commissions";
+type AdminSection = "comptes" | "demandes" | "produits" | "commissions";
 
 type AdminUser = {
   id: string;
@@ -63,8 +63,6 @@ type Submission = {
   shipping_label_url?: string | null;
   shipping_label_status?: string | null;
   shipping_label_error?: string | null;
-  with_insurance: boolean;
-  insurance_fee: number;
   status: SubmissionStatus;
   commission_paid: boolean;
 };
@@ -145,9 +143,35 @@ export function AdminLayout({
 }: AdminLayoutProps) {
   const router = useRouter();
   const { t, locale } = useI18n();
+  const rachatHomeHref = locale === "en" ? "/en" : "/";
+
+  const roleBadgeLabel =
+    viewerRole === "super_admin"
+      ? "Super admin"
+      : viewerRole === "admin"
+        ? "Admin"
+        : locale === "en"
+          ? "Staff"
+          : "Employé";
+
+  const compactLang =
+    "h-9 gap-1.5 border-foreground/15 px-3 py-0 text-[11px] tracking-[0.12em] sm:h-10 sm:px-3.5";
+  const compactLogout =
+    "h-9 border-brand-dark/35 px-4 py-0 text-[11px] tracking-[0.12em] sm:h-10 sm:px-5 sm:text-xs";
+  const sectionFromServer = useMemo<AdminSection>(
+    () =>
+      !canManageStaffAccounts && initialSection === "comptes"
+        ? "demandes"
+        : initialSection,
+    [canManageStaffAccounts, initialSection],
+  );
   const [activeSection, setActiveSection] =
-    useState<AdminSection>(initialSection);
+    useState<AdminSection>(sectionFromServer);
   const [headerMenuOpen, setHeaderMenuOpen] = useState(false);
+
+  useEffect(() => {
+    setActiveSection(sectionFromServer);
+  }, [sectionFromServer]);
 
   const mobileSectionItems: { id: AdminSection; label: string; icon: typeof Users }[] =
     [
@@ -157,7 +181,6 @@ export function AdminLayout({
       { id: "demandes", label: t.admin.tradeInRequests, icon: ShoppingBag },
       { id: "commissions", label: t.admin.commissions, icon: DollarSign },
       { id: "produits", label: t.admin.products, icon: Package },
-      { id: "incidents", label: t.admin.incidents, icon: AlertTriangle },
     ];
 
   const updateUrl = (section: AdminSection) => {
@@ -192,44 +215,39 @@ export function AdminLayout({
   };
 
   const handleSectionChange = (section: AdminSection) => {
+    if (section === "comptes" && !canManageStaffAccounts) {
+      return;
+    }
     setActiveSection(section);
     updateUrl(section);
   };
 
   return (
     <div className="min-h-screen bg-background">
-      <header className="sticky top-0 z-50 border-b border-foreground/10 bg-background/80 backdrop-blur-md">
-        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-4 sm:px-6 sm:py-5">
-          <div className="flex shrink-0 flex-col gap-0.5 sm:flex-row sm:items-center sm:gap-4">
-          <Link href="/" className="flex items-center">
-            <Image
-              src="/logo.png"
-              alt="AcheteTonCell"
-              width={200}
-              height={100}
-              className="h-10 w-auto"
-              priority
-            />
-          </Link>
-          <span className="text-[10px] uppercase tracking-wider text-foreground/45">
-            {viewerRole === "super_admin"
-              ? "Super admin"
-              : viewerRole === "admin"
-                ? "Admin"
-                : "Employé"}
-          </span>
+      <header className="sticky top-0 z-50 border-b border-foreground/[0.07] bg-background/85 backdrop-blur-xl supports-backdrop-filter:bg-background/70">
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 py-3 sm:gap-4 sm:px-6 sm:py-3.5">
+          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-2 sm:gap-x-4">
+            <span className="inline-flex items-center rounded-md border border-foreground/10 bg-foreground/5 px-2.5 py-1 text-[10px] font-semibold uppercase leading-none tracking-[0.16em] text-foreground/50">
+              {roleBadgeLabel}
+            </span>
+            <Link
+              href={rachatHomeHref}
+              className="inline-flex max-w-full min-w-0 items-center gap-1.5 rounded-lg border border-brand-dark/35 bg-transparent px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-brand-dark transition-colors hover:border-brand-primary/60 hover:bg-brand-primary/6 hover:text-brand-primary sm:px-3.5 sm:py-2 sm:text-xs sm:tracking-[0.12em]"
+            >
+              <ArrowLeft className="h-3.5 w-3.5 shrink-0 sm:h-4 sm:w-4" aria-hidden />
+              <span className="truncate">{t.admin.backToRachatHome}</span>
+            </Link>
           </div>
-          {/* Desktop: language + logout */}
-          <div className="hidden items-center gap-6 md:flex lg:gap-8">
-            <LanguageSwitcher />
-            <LogoutButton />
+          <div className="hidden shrink-0 items-center gap-2 sm:gap-3 md:flex">
+            <LanguageSwitcher triggerClassName={compactLang} />
+            <LogoutButton className={compactLogout} />
           </div>
-          {/* Mobile: hamburger */}
-          <div className="flex items-center gap-3 md:hidden">
+          <div className="flex shrink-0 items-center gap-2 md:hidden">
+            <LanguageSwitcher triggerClassName={compactLang} />
             <button
               type="button"
               onClick={() => setHeaderMenuOpen((o) => !o)}
-              className="flex h-10 w-10 items-center justify-center rounded-lg border border-foreground/10 bg-background text-foreground transition-colors hover:bg-foreground/5"
+              className="flex h-9 w-9 items-center justify-center rounded-lg border border-foreground/12 text-foreground/80 transition-colors hover:bg-foreground/5 sm:h-10 sm:w-10"
               aria-expanded={headerMenuOpen}
               aria-controls="admin-header-menu"
               aria-label={headerMenuOpen ? t.nav.closeMenu : t.nav.openMenu}
@@ -246,7 +264,7 @@ export function AdminLayout({
         {/* Mobile header menu */}
         <div
           id="admin-header-menu"
-          className={`border-t border-foreground/10 bg-background md:hidden ${
+          className={`border-t border-foreground/[0.07] bg-background/95 md:hidden ${
             headerMenuOpen ? "visible block" : "hidden"
           }`}
           aria-hidden={!headerMenuOpen}
@@ -276,14 +294,8 @@ export function AdminLayout({
                 );
               })}
             </div>
-            <div className="flex items-center gap-2 border-t border-foreground/10 px-4 pt-3">
-              <span className="text-xs uppercase tracking-wider text-foreground/50">
-                {locale === "fr" ? "Langue" : "Language"}
-              </span>
-              <LanguageSwitcher />
-            </div>
-            <div className="mt-2 border-t border-foreground/10 pt-3">
-              <LogoutButton />
+            <div className="border-t border-foreground/[0.07] pt-3">
+              <LogoutButton className="w-full justify-center py-3" />
             </div>
           </nav>
         </div>
@@ -332,7 +344,11 @@ export function AdminLayout({
                 </p>
               </div>
               {selectedOrder ? (
-                <OrderDetail orderId={selectedOrder} submissions={orderSubmissions} />
+                <OrderDetail
+                  orderId={selectedOrder}
+                  submissions={orderSubmissions}
+                  canManageCommissionPaid={viewerRole === "super_admin"}
+                />
               ) : (
                 <OrdersTable orders={orders} />
               )}
@@ -349,7 +365,10 @@ export function AdminLayout({
                   {t.admin.commissionsSubtitle}
                 </p>
               </div>
-              <CommissionsDashboard commissionsData={commissionsData} />
+              <CommissionsDashboard
+                commissionsData={commissionsData}
+                canManageCommissionPaid={viewerRole === "super_admin"}
+              />
             </div>
           )}
 
@@ -380,19 +399,6 @@ export function AdminLayout({
             </div>
           )}
 
-          {activeSection === "incidents" && (
-            <div>
-              <div className="mb-6 sm:mb-8">
-                <h1 className="mb-2 font-(family-name:--font-playfair) text-2xl font-light text-brand-dark sm:text-3xl md:text-4xl lg:text-5xl">
-                  {t.admin.incidentsRegister}
-                </h1>
-                <p className="text-foreground/60">
-                  {t.admin.incidentsSubtitle}
-                </p>
-              </div>
-              <IncidentLogsTable />
-            </div>
-          )}
         </main>
       </div>
     </div>

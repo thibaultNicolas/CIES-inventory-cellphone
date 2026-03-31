@@ -244,16 +244,9 @@ export function HomeContent({ brands = [] }: HomeContentProps) {
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 py-3 sm:px-6 sm:py-4">
           <Link
             href={getLocalizedPath("/")}
-            className="flex items-center shrink-0"
+            className="shrink-0 font-(family-name:--font-playfair) text-xl font-semibold tracking-tight text-brand-dark transition-colors hover:text-brand-primary sm:text-2xl"
           >
-            <Image
-              src="/logo.png"
-              alt="AcheteTonCell"
-              width={200}
-              height={100}
-              className="h-[2.7rem] w-auto sm:h-[3.3rem]"
-              priority
-            />
+            AcheteTonCell
           </Link>
           {/* Desktop: links + CTA + language */}
           <div className="hidden flex-wrap items-center justify-end gap-3 md:flex md:gap-6">
@@ -1168,16 +1161,13 @@ export function Footer() {
     <footer className="border-t-[3px] border-brand-primary bg-[#F2F2F2]">
       <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6 sm:py-12">
         <div className="grid grid-cols-1 gap-10 md:grid-cols-3 md:gap-8">
-          {/* Column 1: Logo + tagline + social */}
+          {/* Column 1: Nom + tagline + social */}
           <div className="flex flex-col gap-4">
-            <Link href={getLocalizedPath("/")} className="w-fit shrink-0">
-              <Image
-                src="/logo.png"
-                alt="AcheteTonCell"
-                width={200}
-                height={80}
-                className="h-32 w-auto brightness-[1.9] saturate-0 contrast-[1.2]"
-              />
+            <Link
+              href={getLocalizedPath("/")}
+              className="w-fit shrink-0 font-(family-name:--font-playfair) text-2xl font-semibold tracking-tight text-brand-dark"
+            >
+              AcheteTonCell
             </Link>
             <p className="max-w-xs text-sm leading-relaxed text-black/80">
               {t.footer.tagline}
@@ -1282,20 +1272,6 @@ export function Footer() {
           <span aria-hidden>·</span>
           <Link href={rachatPath} className="hover:text-black/80">
             {t.footer.tradeInRequest}
-          </Link>
-          <span aria-hidden>·</span>
-          <Link
-            href={getLocalizedPath("/politique-de-confidentialite")}
-            className="hover:text-black/80"
-          >
-            {t.footer.privacy}
-          </Link>
-          <span aria-hidden>·</span>
-          <Link
-            href={getLocalizedPath("/termes-et-conditions")}
-            className="hover:text-black/80"
-          >
-            {t.footer.terms}
           </Link>
         </div>
       </div>

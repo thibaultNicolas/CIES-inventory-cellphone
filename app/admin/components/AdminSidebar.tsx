@@ -1,10 +1,10 @@
 "use client";
 
 import { useMemo } from "react";
-import { Users, ShoppingBag, Package, AlertTriangle, DollarSign } from "lucide-react";
+import { Users, ShoppingBag, Package, DollarSign } from "lucide-react";
 import { useI18n } from "@/contexts/I18nContext";
 
-type AdminSection = "comptes" | "demandes" | "produits" | "incidents" | "commissions";
+type AdminSection = "comptes" | "demandes" | "produits" | "commissions";
 
 type AdminSidebarProps = {
   activeSection: AdminSection;
@@ -27,7 +27,6 @@ export function AdminSidebar({
       { id: "demandes" as const, label: t.admin.tradeInRequests, icon: ShoppingBag },
       { id: "commissions" as const, label: t.admin.commissions, icon: DollarSign },
       { id: "produits" as const, label: t.admin.products, icon: Package },
-      { id: "incidents" as const, label: t.admin.incidents, icon: AlertTriangle },
     ],
     [t.admin, showAccountsSection]
   );

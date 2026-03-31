@@ -9,8 +9,6 @@ const PUBLIC_ROOTS = [
   "/a-propos",
   "/contact",
   "/service-aux-entreprises",
-  "/politique-de-confidentialite",
-  "/termes-et-conditions",
 ] as const;
 
 function isPublicPath(pathname: string): boolean {
@@ -34,6 +32,7 @@ function isPublicPath(pathname: string): boolean {
     if (pathname === root || pathname.startsWith(`${root}/`)) return true;
   }
   if (pathname === "/en" || pathname.startsWith("/en/")) return true;
+  if (pathname === "/fr" || pathname.startsWith("/fr/")) return true;
 
   return false;
 }

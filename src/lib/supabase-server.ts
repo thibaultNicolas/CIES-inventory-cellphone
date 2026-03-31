@@ -73,16 +73,19 @@ export function createCachedClient() {
  * To use this client, add SUPABASE_SERVICE_ROLE_KEY to your .env.local
  */
 export function createAdminClient() {
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
 
   if (!serviceRoleKey) {
+    if (process.env.NODE_ENV === "production") {
+      throw new Error(
+        "SUPABASE_SERVICE_ROLE_KEY is required in production for server-side admin operations.",
+      );
+    }
     console.warn(
       "⚠️ SUPABASE_SERVICE_ROLE_KEY is not set. " +
         "Admin operations may fail if RLS is enabled. " +
-        "Falling back to the anon key.",
+        "Falling back to the anon key (development only).",
     );
-    // Fall back to the anon key if the service role key is not set.
-    // This allows the code to work in development.
     return createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,

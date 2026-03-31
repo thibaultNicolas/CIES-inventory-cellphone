@@ -2,7 +2,7 @@
 
 import { createAdminClient } from "@/lib/supabase-server";
 import { revalidatePath } from "next/cache";
-import { requireAdmin } from "@/lib/admin-auth";
+import { requireSuperAdmin } from "@/lib/admin-auth";
 
 type UpdateCommissionPaidParams = {
   submissionId: string;
@@ -13,9 +13,9 @@ export async function updateCommissionPaid({
   submissionId,
   commissionPaid,
 }: UpdateCommissionPaidParams) {
-  const admin = await requireAdmin();
+  const admin = await requireSuperAdmin();
   if (!admin) {
-    return { success: false, error: "Unauthorized" };
+    return { success: false, error: "Forbidden" };
   }
 
   const supabase = createAdminClient();

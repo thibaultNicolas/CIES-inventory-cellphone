@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { hasMinRole, type AppRole } from "@/lib/app-role";
 import { LanguageSwitcher } from "./LanguageSwitcher";
@@ -19,6 +18,11 @@ function roleLabel(
   if (role === "admin") return t.admin;
   return t.employee;
 }
+
+const compactLang =
+  "h-9 gap-1.5 border-foreground/15 px-3 py-0 text-[11px] tracking-[0.12em] sm:h-10 sm:px-3.5";
+const compactLogout =
+  "h-9 border-brand-dark/35 px-4 py-0 text-[11px] tracking-[0.12em] sm:h-10 sm:px-5 sm:text-xs";
 
 /**
  * Barre staff sur les pages publiques : visible seulement si l’utilisateur a un rôle app.
@@ -47,30 +51,20 @@ export function AuthenticatedHeader() {
   };
 
   return (
-    <header className="sticky top-0 z-50 border-b border-foreground/10 bg-background/90 backdrop-blur-md">
-      <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
-        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2 sm:gap-3">
-          <Link href="/" className="flex shrink-0 items-center">
-            <Image
-              src="/logo.png"
-              alt="AcheteTonCell"
-              width={200}
-              height={100}
-              className="h-9 w-auto sm:h-10"
-              priority
-            />
-          </Link>
-          <span className="hidden text-[10px] uppercase tracking-wider text-foreground/45 sm:inline">
+    <header className="sticky top-0 z-50 border-b border-foreground/[0.07] bg-background/85 backdrop-blur-xl supports-backdrop-filter:bg-background/70">
+      <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 py-3 sm:gap-4 sm:px-6 sm:py-3.5">
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-2 sm:gap-x-4">
+          <span className="inline-flex items-center rounded-md border border-foreground/10 bg-foreground/5 px-2.5 py-1 text-[10px] font-semibold uppercase leading-none tracking-[0.16em] text-foreground/50">
             {roleLabel(role, staffLabels)}
           </span>
           {showAdminTab ? (
             <nav
-              className="flex items-center gap-1 sm:ml-1"
+              className="flex items-center"
               aria-label={locale === "en" ? "Staff" : "Personnel"}
             >
               <Link
                 href="/admin"
-                className="rounded-full border-2 border-brand-dark bg-brand-dark px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.12em] text-background transition-colors hover:bg-brand-primary sm:px-4 sm:py-2 sm:text-sm"
+                className="inline-flex items-center rounded-lg border border-brand-dark/35 bg-transparent px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-brand-dark transition-colors hover:border-brand-primary/60 hover:bg-brand-primary/6 hover:text-brand-primary sm:px-3.5 sm:py-2 sm:text-xs sm:tracking-[0.12em]"
               >
                 {t.nav.adminDashboard}
               </Link>
@@ -78,17 +72,17 @@ export function AuthenticatedHeader() {
           ) : null}
         </div>
 
-        <div className="hidden items-center gap-4 md:flex md:gap-6">
-          <LanguageSwitcher />
-          <LogoutButton />
+        <div className="hidden shrink-0 items-center gap-2 sm:gap-3 md:flex">
+          <LanguageSwitcher triggerClassName={compactLang} />
+          <LogoutButton className={compactLogout} />
         </div>
 
-        <div className="flex items-center gap-2 md:hidden">
-          <LanguageSwitcher />
+        <div className="flex shrink-0 items-center gap-2 md:hidden">
+          <LanguageSwitcher triggerClassName={compactLang} />
           <button
             type="button"
             onClick={() => setMenuOpen((o) => !o)}
-            className="flex h-10 w-10 items-center justify-center rounded-lg border border-foreground/10 bg-background text-foreground hover:bg-foreground/5"
+            className="flex h-9 w-9 items-center justify-center rounded-lg border border-foreground/12 text-foreground/80 transition-colors hover:bg-foreground/5 sm:h-10 sm:w-10"
             aria-expanded={menuOpen}
             aria-controls="staff-header-menu"
             aria-label={menuOpen ? t.nav.closeMenu : t.nav.openMenu}
@@ -105,18 +99,18 @@ export function AuthenticatedHeader() {
       {menuOpen ? (
         <div
           id="staff-header-menu"
-          className="border-t border-foreground/10 bg-background px-4 py-4 md:hidden"
+          className="border-t border-foreground/[0.07] bg-background/95 px-4 py-4 md:hidden"
         >
           {showAdminTab ? (
             <Link
               href="/admin"
-              className="mb-4 block rounded-full border-2 border-brand-dark bg-brand-dark px-4 py-3 text-center text-sm font-semibold uppercase tracking-[0.12em] text-background"
+              className="mb-4 block rounded-lg border border-brand-dark/35 bg-transparent px-4 py-3 text-center text-sm font-semibold uppercase tracking-[0.12em] text-brand-dark transition-colors hover:bg-brand-primary/6"
               onClick={() => setMenuOpen(false)}
             >
               {t.nav.adminDashboard}
             </Link>
           ) : null}
-          <LogoutButton />
+          <LogoutButton className="w-full justify-center py-3" />
         </div>
       ) : null}
     </header>

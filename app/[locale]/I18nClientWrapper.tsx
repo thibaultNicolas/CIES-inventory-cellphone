@@ -1,9 +1,8 @@
 "use client";
 
-import { ReactNode, Suspense } from "react";
+import { ReactNode } from "react";
 import type { Locale } from "@/lib/i18n";
 import { I18nProvider } from "@/contexts/I18nContext";
-import { CookieBanner } from "../components/CookieBanner";
 
 export function I18nClientWrapper({
   children,
@@ -12,12 +11,5 @@ export function I18nClientWrapper({
   children: ReactNode;
   initialLocale: Locale;
 }) {
-  return (
-    <I18nProvider initialLocale={initialLocale}>
-      {children}
-      <Suspense fallback={null}>
-        <CookieBanner />
-      </Suspense>
-    </I18nProvider>
-  );
+  return <I18nProvider initialLocale={initialLocale}>{children}</I18nProvider>;
 }

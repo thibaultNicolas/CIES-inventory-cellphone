@@ -57,8 +57,6 @@ type Submission = {
   shipping_label_url?: string | null;
   shipping_label_status?: string | null;
   shipping_label_error?: string | null;
-  with_insurance: boolean;
-  insurance_fee: number;
   status: SubmissionStatus;
   commission_paid: boolean;
 };
@@ -75,7 +73,7 @@ type SearchParams = {
   commissionPaid?: string;
 };
 
-type AdminSection = "comptes" | "demandes" | "produits" | "incidents" | "commissions";
+type AdminSection = "comptes" | "demandes" | "produits" | "commissions";
 
 type Price = {
   id: string;
@@ -110,7 +108,7 @@ async function getSubmissions(): Promise<Submission[]> {
   if (error) {
     const message = String((error as { message?: string }).message ?? error);
     const needsFallback =
-      /commission_paid|with_insurance|insurance_fee|request_group_id|customer_address|employee_full_name|client_full_name|client_city|device_imei|price_override_previous|price_override_reason|price_override_updated_at|price_override_updated_by|quantity|column.*does not exist/i.test(
+      /commission_paid|request_group_id|customer_address|employee_full_name|client_full_name|client_city|device_imei|price_override_previous|price_override_reason|price_override_updated_at|price_override_updated_by|quantity|column.*does not exist/i.test(
         message,
       );
 
@@ -169,8 +167,6 @@ async function getSubmissions(): Promise<Submission[]> {
       shipping_label_url: s.shipping_label_url ?? null,
       shipping_label_status: s.shipping_label_status ?? null,
       shipping_label_error: s.shipping_label_error ?? null,
-      with_insurance: s.with_insurance,
-      insurance_fee: s.insurance_fee,
       price_override_previous: s.price_override_previous ?? null,
       price_override_reason: s.price_override_reason ?? null,
       price_override_updated_at: s.price_override_updated_at ?? null,
@@ -347,7 +343,7 @@ async function getCommissionsPaginated(
   const { data, error, count } = await query.range(from, to);
 
   if (error) {
-    if (/commission_paid|with_insurance|insurance_fee|request_group_id|employee_full_name|client_full_name|client_city|device_imei|quantity|column.*does not exist/i.test(String(error.message))) {
+    if (/commission_paid|request_group_id|employee_full_name|client_full_name|client_city|device_imei|quantity|column.*does not exist/i.test(String(error.message))) {
       const fallbackQuery = supabase
         .from("submissions")
         .select(SUBMISSIONS_SELECT_ADMIN_LIST_PARTIAL, { count: "exact" })
@@ -406,8 +402,6 @@ async function getCommissionsPaginated(
             condition: s.condition,
             price: s.price,
             quantity: s.quantity,
-            with_insurance: false,
-            insurance_fee: 0,
             status: s.status,
             commission_paid: false,
           };
@@ -444,8 +438,6 @@ async function getCommissionsPaginated(
           condition: s.condition,
           price: s.price,
           quantity: s.quantity,
-          with_insurance: false,
-          insurance_fee: 0,
           status: s.status,
           commission_paid: false,
         };
@@ -494,8 +486,6 @@ async function getCommissionsPaginated(
       condition: s.condition,
       price: s.price,
       quantity: s.quantity,
-      with_insurance: s.with_insurance,
-      insurance_fee: s.insurance_fee,
       status: s.status,
       commission_paid: s.commission_paid,
     };
@@ -575,7 +565,6 @@ export default async function AdminPage({
     sp.section === "comptes" ||
     sp.section === "demandes" ||
     sp.section === "produits" ||
-    sp.section === "incidents" ||
     sp.section === "commissions"
       ? sp.section
       : "demandes";
@@ -603,7 +592,7 @@ export default async function AdminPage({
   const [submissions, adminUsers, brands, models, prices, commissionsData] =
     await Promise.all([
       getSubmissions(),
-      getAdminUsers(),
+      admin.role === "super_admin" ? getAdminUsers() : Promise.resolve([] as AdminUser[]),
       getBrands(),
       getModels(),
       getPrices(),

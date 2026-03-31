@@ -4,6 +4,27 @@ import { revalidatePath } from "next/cache";
 import { createAdminClient } from "@/lib/supabase-server";
 import { requireAdmin } from "@/lib/admin-auth";
 
+const DEVICE_PHOTOS_BUCKET = "device-photos";
+
+function storageObjectPathsFromRefs(refs: string[]): string[] {
+  const marker = `/object/public/${DEVICE_PHOTOS_BUCKET}/`;
+  const paths: string[] = [];
+  for (const ref of refs) {
+    if (typeof ref !== "string" || !ref.trim()) continue;
+    const t = ref.trim();
+    const i = t.indexOf(marker);
+    if (i >= 0) {
+      const path = decodeURIComponent(t.slice(i + marker.length).split("?")[0] || "");
+      if (path) paths.push(path);
+      continue;
+    }
+    if (!/^https?:\/\//i.test(t)) {
+      paths.push(t.replace(/^\/+/, ""));
+    }
+  }
+  return paths;
+}
+
 export async function deleteSubmission(submissionId: string) {
   try {
     const admin = await requireAdmin();
@@ -26,13 +47,15 @@ export async function deleteSubmission(submissionId: string) {
 
     // 2. Delete photos from Supabase Storage
     if (submission.device_photos && Array.isArray(submission.device_photos) && submission.device_photos.length > 0) {
-      const { error: storageError } = await supabase.storage
-        .from("device-photos")
-        .remove(submission.device_photos);
+      const paths = storageObjectPathsFromRefs(submission.device_photos as string[]);
+      if (paths.length > 0) {
+        const { error: storageError } = await supabase.storage
+          .from(DEVICE_PHOTOS_BUCKET)
+          .remove(paths);
 
-      if (storageError) {
-        console.error("Erreur lors de la suppression des photos:", storageError);
-        // Continue even if photo deletion fails
+        if (storageError) {
+          console.error("Erreur lors de la suppression des photos:", storageError);
+        }
       }
     }
 

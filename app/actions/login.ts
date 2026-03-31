@@ -3,8 +3,16 @@
 import { redirect } from "next/navigation";
 import { createServerActionClient } from "@/lib/supabase-server";
 import { parseAppRole, hasMinRole } from "@/lib/app-role";
+import { checkRateLimit } from "@/lib/rate-limit-memory";
+import { getRequestIpForRateLimit } from "@/lib/request-ip";
 
 export async function login(formData: FormData) {
+  const ip = await getRequestIpForRateLimit();
+  const rl = checkRateLimit(`login:${ip}`, 25, 15 * 60 * 1000);
+  if (!rl.ok) {
+    return { error: "Trop de tentatives. Réessayez dans quelques minutes." };
+  }
+
   const email = (formData.get("email") as string).trim().toLowerCase();
   const password = formData.get("password") as string;
   const redirectTo = formData.get("redirect") as string | null;

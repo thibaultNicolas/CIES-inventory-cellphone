@@ -1,13 +1,7 @@
 import type { MetadataRoute } from "next";
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://achetetoncell.com";
-const routes = [
-  "/",
-  "/a-propos",
-  "/contact",
-  "/politique-de-confidentialite",
-  "/termes-et-conditions",
-] as const;
+const routes = ["/", "/a-propos", "/contact"] as const;
 
 function toAbsolute(path: string) {
   return `${siteUrl}${path}`;

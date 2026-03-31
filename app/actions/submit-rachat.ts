@@ -1,13 +1,16 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { createAdminClient } from "@/lib/supabase-server";
+import { createAdminClient, createCachedClient } from "@/lib/supabase-server";
 import {
   createClickShipShipment,
   getClickShipConfigStatus,
   parseCanadianAddressForClickShip,
   persistClickShipStateToSubmissions,
 } from "@/lib/clickship";
+import { checkRateLimit } from "@/lib/rate-limit-memory";
+import { getRequestIpForRateLimit } from "@/lib/request-ip";
+import { isUuid, signRachatViewToken } from "@/lib/rachat-view-token";
 
 type SubmitRachatDevice = {
   modelId: string;
@@ -58,8 +61,6 @@ type SubmitRachatData = {
   customerEmail?: string;
   customerPhone?: string;
   customerAddress?: string;
-  withInsurance?: boolean;
-  insuranceFee?: number;
   /** Locale for bordereau / messages (fr/en). Defaults to "fr". */
   locale?: Locale;
 };
@@ -136,10 +137,127 @@ function resolveSubmitContact(data: SubmitRachatData): ResolvedContact {
   };
 }
 
-export async function submitRachat(data: SubmitRachatData) {
-  const supabase = createAdminClient();
+async function enforceCatalogForDevices(
+  devices: SubmitRachatDevice[],
+  lang: Locale,
+): Promise<{ ok: true; devices: SubmitRachatDevice[] } | { ok: false; error: string }> {
+  const read = createCachedClient();
+  const out: SubmitRachatDevice[] = [];
 
-  const devices: SubmitRachatDevice[] = data.devices?.length
+  for (const device of devices) {
+    if (!isUuid(device.modelId) || !isUuid(device.brandId)) {
+      return {
+        ok: false,
+        error:
+          lang === "en"
+            ? "Invalid device selection."
+            : "Sélection d'appareil invalide.",
+      };
+    }
+
+    const { data: model, error: modelErr } = await read
+      .from("models")
+      .select("brand_id, name")
+      .eq("id", device.modelId)
+      .maybeSingle();
+
+    if (modelErr || !model || model.brand_id !== device.brandId) {
+      return {
+        ok: false,
+        error:
+          lang === "en"
+            ? "Device does not match the catalog."
+            : "L'appareil ne correspond pas au catalogue.",
+      };
+    }
+
+    const { data: brand } = await read
+      .from("brands")
+      .select("name")
+      .eq("id", device.brandId)
+      .maybeSingle();
+
+    const { data: priceRows, error: priceErr } = await read
+      .from("prices")
+      .select("price")
+      .eq("model_id", device.modelId)
+      .eq("condition", device.condition)
+      .eq("memory", device.memory)
+      .order("created_at", { ascending: false })
+      .limit(1);
+
+    if (priceErr || !priceRows?.length) {
+      return {
+        ok: false,
+        error:
+          lang === "en"
+            ? "No price found for this device configuration."
+            : "Aucun prix trouvé pour cette configuration.",
+      };
+    }
+
+    const rawPrice = priceRows[0].price as number | string | null;
+    const officialPrice =
+      typeof rawPrice === "number" && Number.isFinite(rawPrice)
+        ? rawPrice
+        : typeof rawPrice === "string" &&
+            rawPrice.trim() !== "" &&
+            Number.isFinite(Number(rawPrice))
+          ? Number(rawPrice)
+          : NaN;
+
+    if (!Number.isFinite(officialPrice) || officialPrice <= 0) {
+      return {
+        ok: false,
+        error:
+          lang === "en" ? "Invalid catalog price." : "Prix catalogue invalide.",
+      };
+    }
+
+    const modelName =
+      typeof model.name === "string" && model.name.trim()
+        ? model.name.trim()
+        : device.modelName;
+    const brandName =
+      typeof brand?.name === "string" && brand.name.trim()
+        ? brand.name.trim()
+        : device.brandName;
+
+    out.push({
+      ...device,
+      price: officialPrice,
+      modelName,
+      brandName,
+    });
+  }
+
+  return { ok: true, devices: out };
+}
+
+function isDevicePhotoPublicUrl(url: string): boolean {
+  try {
+    const u = new URL(url);
+    if (u.protocol !== "https:") return false;
+    return u.pathname.includes("/object/public/device-photos/");
+  } catch {
+    return false;
+  }
+}
+
+export async function submitRachat(data: SubmitRachatData) {
+  const lang: Locale = data.locale === "en" ? "en" : "fr";
+  const tooMany =
+    lang === "en"
+      ? "Too many submissions from this address. Please try again later."
+      : "Trop de demandes depuis cette adresse. Veuillez réessayer plus tard.";
+
+  const ip = await getRequestIpForRateLimit();
+  const rl = checkRateLimit(`rachat-submit:${ip}`, 40, 60 * 60 * 1000);
+  if (!rl.ok) {
+    return { success: false, error: tooMany, id: null };
+  }
+
+  const devicesInput: SubmitRachatDevice[] = data.devices?.length
     ? data.devices
     : data.modelId &&
         data.brandId &&
@@ -163,8 +281,30 @@ export async function submitRachat(data: SubmitRachatData) {
         ]
       : [];
 
-  if (devices.length === 0) {
+  if (devicesInput.length === 0) {
     return { success: false, error: "No devices to submit", id: null };
+  }
+
+  const catalog = await enforceCatalogForDevices(devicesInput, lang);
+  if (!catalog.ok) {
+    return { success: false, error: catalog.error, id: null };
+  }
+  const devices = catalog.devices;
+
+  for (const d of devices) {
+    for (const p of d.devicePhotos) {
+      if (typeof p !== "string" || !p.trim()) continue;
+      if (!isDevicePhotoPublicUrl(p.trim())) {
+        return {
+          success: false,
+          error:
+            lang === "en"
+              ? "Invalid photo link. Please upload images again."
+              : "Lien de photo invalide. Veuillez téléverser à nouveau les images.",
+          id: null,
+        };
+      }
+    }
   }
 
   const contact = resolveSubmitContact(data);
@@ -173,15 +313,10 @@ export async function submitRachat(data: SubmitRachatData) {
   }
 
   const requestGroupId = data.requestGroupId || crypto.randomUUID();
-  const withInsurance = data.withInsurance === true;
-  const insuranceFee =
-    withInsurance &&
-    typeof data.insuranceFee === "number" &&
-    Number.isFinite(data.insuranceFee)
-      ? Math.max(0, data.insuranceFee)
-      : 0;
 
-  const payloadsWithInsurance = devices.map((device) => ({
+  const supabase = createAdminClient();
+
+  const payloads = devices.map((device) => ({
     request_group_id: requestGroupId,
     model_id: device.modelId,
     brand_id: device.brandId,
@@ -200,15 +335,13 @@ export async function submitRachat(data: SubmitRachatData) {
     customer_phone: contact.customer_phone,
     customer_address: contact.customer_address || null,
     device_photos: device.devicePhotos,
-    with_insurance: withInsurance,
-    insurance_fee: insuranceFee,
     status: "unprocessed",
   }));
 
   let submissions: { id: string; created_at: string }[] | null = null;
   let error: { message: string } | null = null;
 
-  let insertPayloads: Record<string, unknown>[] = payloadsWithInsurance.map((p) => ({
+  let insertPayloads: Record<string, unknown>[] = payloads.map((p) => ({
     ...p,
   }));
 
@@ -231,7 +364,7 @@ export async function submitRachat(data: SubmitRachatData) {
       };
     }
 
-    insertPayloads = payloadsWithInsurance.map((payload) => {
+    insertPayloads = payloads.map((payload) => {
       const nextPayload = { ...payload } as Record<string, unknown>;
       if (
         /employee_full_name|client_full_name|client_city|device_imei/i.test(msg) &&
@@ -248,10 +381,6 @@ export async function submitRachat(data: SubmitRachatData) {
       if (msg.includes("request_group_id")) {
         delete nextPayload.request_group_id;
       }
-      if (msg.includes("with_insurance") || msg.includes("insurance_fee")) {
-        delete nextPayload.with_insurance;
-        delete nextPayload.insurance_fee;
-      }
       return nextPayload;
     });
 
@@ -263,14 +392,12 @@ export async function submitRachat(data: SubmitRachatData) {
   if (error) {
     const msg = error.message;
     const canDropRequestGroup = msg.includes("request_group_id");
-    const canDropInsurance =
-      msg.includes("with_insurance") || msg.includes("insurance_fee");
     const canDropQuantity = /quantity/i.test(msg) && /does not exist/i.test(msg);
     const canDropTradeIn =
       /employee_full_name|client_full_name|client_city|device_imei/i.test(msg) &&
       /does not exist/i.test(msg);
 
-    if (canDropRequestGroup || canDropInsurance || canDropQuantity || canDropTradeIn) {
+    if (canDropRequestGroup || canDropQuantity || canDropTradeIn) {
       if (canDropRequestGroup && devices.length > 1) {
         return {
           success: false,
@@ -281,14 +408,10 @@ export async function submitRachat(data: SubmitRachatData) {
         };
       }
 
-      const fallbackPayloads = payloadsWithInsurance.map((payload) => {
+      const fallbackPayloads = payloads.map((payload) => {
         const nextPayload = { ...payload } as Record<string, unknown>;
         if (canDropRequestGroup) {
           delete nextPayload.request_group_id;
-        }
-        if (canDropInsurance) {
-          delete nextPayload.with_insurance;
-          delete nextPayload.insurance_fee;
         }
         if (canDropQuantity) {
           delete nextPayload.quantity;
@@ -412,11 +535,19 @@ export async function submitRachat(data: SubmitRachatData) {
 
   revalidatePath("/");
   revalidatePath("/en");
+  revalidatePath("/fr");
+
+  const viewToken = signRachatViewToken(
+    submissions.map((row) => row.id),
+    requestGroupId,
+  );
+
   return {
     success: true,
     id: firstSubmissionId,
     ids: submissions.map((row) => row.id),
     requestGroupId,
+    viewToken,
     error: null,
   };
 }

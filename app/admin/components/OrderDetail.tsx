@@ -40,8 +40,6 @@ export type OrderDetailSubmission = {
   shipping_label_url?: string | null;
   shipping_label_status?: string | null;
   shipping_label_error?: string | null;
-  with_insurance: boolean;
-  insurance_fee?: number;
   status: SubmissionStatus;
   commission_paid: boolean;
 };
@@ -49,6 +47,8 @@ export type OrderDetailSubmission = {
 type OrderDetailProps = {
   orderId: string;
   submissions: OrderDetailSubmission[];
+  /** Basculer payé / non payé : super_admin uniquement. */
+  canManageCommissionPaid?: boolean;
 };
 
 function formatDate(dateString: string, locale: string) {
@@ -85,7 +85,11 @@ const STATUS_LABEL_KEY: Record<
   cancelled: "statusCancelled",
 };
 
-export function OrderDetail({ orderId, submissions }: OrderDetailProps) {
+export function OrderDetail({
+  orderId,
+  submissions,
+  canManageCommissionPaid = false,
+}: OrderDetailProps) {
   const router = useRouter();
   const { t, locale } = useI18n();
   const [isWorking, setIsWorking] = useState<Record<string, boolean>>({});
@@ -111,20 +115,10 @@ export function OrderDetail({ orderId, submissions }: OrderDetailProps) {
       0,
     );
     const orderUnitsTotal = submissions.reduce((sum, s) => sum + s.quantity, 0);
-    const withInsurance = submissions.some((s) => s.with_insurance);
-    // Insurance fee is an order-level value (but may be duplicated on each row in the DB).
-    const insuranceFee = withInsurance
-      ? Math.max(
-          0,
-          ...submissions.map((s) =>
-            s.with_insurance ? (s.insurance_fee ?? 0) : 0,
-          ),
-        )
-      : 0;
     const commissionPaidCount = submissions.filter(
       (s) => s.commission_paid,
     ).length;
-    const netTotal = devicesTotal - insuranceFee;
+    const netTotal = devicesTotal;
 
     return {
       first,
@@ -132,8 +126,6 @@ export function OrderDetail({ orderId, submissions }: OrderDetailProps) {
       devicesTotal,
       orderUnitsTotal,
       netTotal,
-      withInsurance,
-      insuranceFee,
       commissionPaidCount,
     };
   }, [submissions]);
@@ -399,21 +391,34 @@ export function OrderDetail({ orderId, submissions }: OrderDetailProps) {
                     </div>
 
                     <div className="flex flex-wrap items-center gap-2">
-                      <button
-                        type="button"
-                        disabled={isWorking[s.id]}
-                        onClick={() =>
-                          handleToggleCommissionPaid(s.id, s.commission_paid)
-                        }
-                        className={`inline-flex items-center gap-2 rounded-card border px-3 py-2 text-xs font-medium transition-colors ${
-                          s.commission_paid
-                            ? "border-green-500/40 bg-green-500/10 text-green-700"
-                            : "border-foreground/15 bg-foreground/5 text-foreground/70 hover:border-amber-500/40 hover:bg-amber-500/10 hover:text-amber-700"
-                        }`}
-                      >
-                        {t.admin.commissionPaid}:{" "}
-                        {s.commission_paid ? t.admin.yes : t.admin.no}
-                      </button>
+                      {canManageCommissionPaid ? (
+                        <button
+                          type="button"
+                          disabled={isWorking[s.id]}
+                          onClick={() =>
+                            handleToggleCommissionPaid(s.id, s.commission_paid)
+                          }
+                          className={`inline-flex items-center gap-2 rounded-card border px-3 py-2 text-xs font-medium transition-colors ${
+                            s.commission_paid
+                              ? "border-green-500/40 bg-green-500/10 text-green-700"
+                              : "border-foreground/15 bg-foreground/5 text-foreground/70 hover:border-amber-500/40 hover:bg-amber-500/10 hover:text-amber-700"
+                          }`}
+                        >
+                          {t.admin.commissionPaid}:{" "}
+                          {s.commission_paid ? t.admin.yes : t.admin.no}
+                        </button>
+                      ) : (
+                        <span
+                          className={`inline-flex items-center gap-2 rounded-card border px-3 py-2 text-xs font-medium ${
+                            s.commission_paid
+                              ? "border-green-500/40 bg-green-500/10 text-green-700"
+                              : "border-foreground/15 bg-foreground/5 text-foreground/70"
+                          }`}
+                        >
+                          {t.admin.commissionPaid}:{" "}
+                          {s.commission_paid ? t.admin.yes : t.admin.no}
+                        </span>
+                      )}
                     </div>
                   </div>
 
@@ -687,20 +692,6 @@ export function OrderDetail({ orderId, submissions }: OrderDetailProps) {
                   {summary.devicesTotal.toFixed(2)}$
                 </span>
               </div>
-              <div className="flex items-center justify-between text-foreground/70">
-                <span>{t.admin.shippingProtection}</span>
-                <span className="font-medium text-foreground">
-                  {summary.withInsurance ? t.admin.yes : t.admin.no}
-                </span>
-              </div>
-              {summary.withInsurance && (
-                <div className="flex items-center justify-between text-foreground/70">
-                  <span>{t.admin.insuranceFeeLabel}</span>
-                  <span className="font-medium text-foreground">
-                    -{summary.insuranceFee.toFixed(2)}$
-                  </span>
-                </div>
-              )}
               <div className="my-2 border-t border-foreground/10" />
               <div className="flex items-center justify-between">
                 <span className="font-semibold text-foreground">

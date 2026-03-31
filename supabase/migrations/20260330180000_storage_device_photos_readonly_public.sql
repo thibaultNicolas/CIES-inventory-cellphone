@@ -1,9 +1,8 @@
 -- Politiques Storage pour le bucket device-photos
--- Exécutez dans le SQL Editor Supabase (ou via migration).
+-- Aligné sur scripts/setup-storage-policies.sql
 --
--- Modèle : lecture publique (URLs dans les soumissions), pas d’upload/update/delete
--- anonymes — les écritures passent par la clé service_role côté serveur
--- (createAdminClient, ex. uploadDevicePhotoForRachat).
+-- Lecture publique uniquement (URLs dans les soumissions) ; pas d’upload/update/delete
+-- anonymes — écritures via service_role (createAdminClient, uploadDevicePhotoForRachat).
 
 DROP POLICY IF EXISTS "Public can upload photos" ON storage.objects;
 DROP POLICY IF EXISTS "Public can read photos" ON storage.objects;
@@ -17,5 +16,3 @@ CREATE POLICY "Public can read device-photos"
   FOR SELECT
   TO public
   USING (bucket_id = 'device-photos');
-
--- Vérifier que le bucket existe et est marqué public si vous utilisez getPublicUrl.

@@ -2,7 +2,6 @@
 
 import { Suspense, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import Image from "next/image";
 import { motion } from "framer-motion";
 import { login } from "../actions/login";
 import { Lock } from "lucide-react";
@@ -37,16 +36,9 @@ function LoginPageInner() {
     <div className="flex min-h-screen items-center justify-center bg-background px-6">
       <div className="w-full max-w-md">
         <div className="mb-12 text-center">
-          <div className="inline-block">
-            <Image
-              src="/logo.png"
-              alt="AcheteTonCell"
-              width={150}
-              height={50}
-              className="mx-auto h-12 w-auto"
-              priority
-            />
-          </div>
+          <p className="font-(family-name:--font-playfair) text-3xl font-semibold tracking-tight text-brand-dark">
+            AcheteTonCell
+          </p>
         </div>
 
         <motion.div

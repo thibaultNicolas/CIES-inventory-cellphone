@@ -115,18 +115,6 @@ async function createAdminUser() {
   console.log(`   Rôle (app_metadata): ${role}`);
   console.log(`   Nom affiché: ${name || "(aucun)"}`);
 
-  // Check whether the email already exists
-  const { data: existingUser } = await supabase
-    .from("admin_users")
-    .select("id, email")
-    .eq("email", email)
-    .single();
-
-  if (existingUser) {
-    console.error(`❌ Un compte avec l'email ${email} existe déjà.`);
-    process.exit(1);
-  }
-
   const { data: authData, error: authError } = await supabase.auth.admin.createUser({
     email,
     password,
@@ -136,33 +124,25 @@ async function createAdminUser() {
   });
 
   if (authError || !authData.user) {
-    console.error("❌ Erreur lors de la création Auth:", authError?.message);
+    const msg = authError?.message ?? "";
+    if (
+      /already (been )?registered|already exists|duplicate/i.test(msg) ||
+      authError?.status === 422
+    ) {
+      console.error(`❌ Un compte avec l'email ${email} existe déjà.`);
+    } else {
+      console.error("❌ Erreur lors de la création Auth:", msg || authError);
+    }
     process.exit(1);
   }
 
-  // Create the admin mapping row
-  const { data: newUser, error } = await supabase
-    .from("admin_users")
-    .insert({
-      id: authData.user.id,
-      email,
-      password_hash: "managed-by-supabase-auth",
-      name,
-    })
-    .select("id, email, name")
-    .single();
-
-  if (error) {
-    await supabase.auth.admin.deleteUser(authData.user.id).catch(() => undefined);
-    console.error("❌ Erreur lors de la création:", error.message);
-    process.exit(1);
-  }
+  const newUser = authData.user;
 
   console.log("✅ Compte admin créé avec succès!");
   console.log(`   ID: ${newUser.id}`);
   console.log(`   Email: ${newUser.email}`);
-  if (newUser.name) {
-    console.log(`   Nom: ${newUser.name}`);
+  if (name) {
+    console.log(`   Nom: ${name}`);
   }
   console.log("\n💡 Vous pouvez maintenant vous connecter à /login");
 }

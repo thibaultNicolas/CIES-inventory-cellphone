@@ -4,7 +4,6 @@ import { Plus_Jakarta_Sans, Sora } from "next/font/google";
 import { getDefaultMetadata, getStructuredData } from "@/metadata";
 import Script from "next/script";
 import type { Locale } from "@/lib/i18n";
-import { CookieBanner } from "./components/CookieBanner";
 import { ScrollToTopOnRouteChange } from "./components/ScrollToTopOnRouteChange";
 import { AuthenticatedHeader } from "./components/AuthenticatedHeader";
 import { I18nProvider } from "@/contexts/I18nContext";
@@ -56,7 +55,6 @@ gtag('config', '${GOOGLE_ANALYTICS_ID}');`}
           <ScrollToTopOnRouteChange />
           <AuthenticatedHeader />
           {children}
-          <CookieBanner />
         </I18nProvider>
       </body>
     </html>

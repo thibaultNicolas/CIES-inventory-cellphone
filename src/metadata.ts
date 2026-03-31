@@ -44,15 +44,6 @@ const brandColor = "#0026FF";
 export function getDefaultMetadata(): Metadata {
   return {
     metadataBase: new URL(siteUrl),
-    icons: {
-      icon: [
-        { url: "/favicon.webp", type: "image/webp" },
-        { url: "/favicon.ico", type: "image/x-icon" },
-        { url: "/share.png", type: "image/png", sizes: "500x500" },
-      ],
-      shortcut: [{ url: "/favicon.webp", type: "image/webp" }],
-      apple: [{ url: "/share.png", type: "image/png" }],
-    },
     title: {
       default: defaultTitle,
       template: `%s | ${siteName}`,
@@ -298,32 +289,6 @@ export function getAdminMetadata(): Metadata {
 }
 
 /**
- * Metadata for the privacy policy page.
- */
-export function getPolitiqueConfidentialiteMetadata(locale: SiteLocale = "fr"): Metadata {
-  return getPageMetadata({
-    title: "Politique de confidentialité",
-    description:
-      "Politique de confidentialité d'AcheteTonCell conforme à la Loi 25 du Québec. Protection des renseignements personnels et transparence sur l'utilisation de vos données.",
-    url: "/politique-de-confidentialite",
-    locale,
-  });
-}
-
-/**
- * Metadata for the terms and conditions page.
- */
-export function getTermesEtConditionsMetadata(locale: SiteLocale = "fr"): Metadata {
-  return getPageMetadata({
-    title: "Termes et conditions",
-    description:
-      "Termes et conditions d'utilisation d'AcheteTonCell. Conditions générales de vente et de rachat de téléphones cellulaires au Québec.",
-    url: "/termes-et-conditions",
-    locale,
-  });
-}
-
-/**
  * Generate extra OpenGraph meta tags (including the electric blue theme color).
  */
 export function getOpenGraphTags() {
@@ -365,7 +330,6 @@ export function getStructuredData() {
     "@type": "Organization",
     name: siteName,
     url: siteUrl,
-    logo: `${siteUrl}/logo.png`,
     description: defaultDescription,
     address: {
       "@type": "PostalAddress",

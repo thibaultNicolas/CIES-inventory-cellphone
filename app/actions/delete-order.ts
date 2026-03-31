@@ -1,8 +1,14 @@
 "use server";
 
 import { createAdminClient } from "@/lib/supabase-server";
+import { requireAdmin } from "@/lib/admin-auth";
 
 export async function deleteOrder(orderId: string) {
+  const admin = await requireAdmin();
+  if (!admin) {
+    return { success: false, error: "Unauthorized" };
+  }
+
   const supabase = createAdminClient();
 
   // First, try deleting by `request_group_id` (the real order id).

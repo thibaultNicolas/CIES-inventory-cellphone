@@ -5,8 +5,14 @@ import { useState, useEffect } from "react";
 import { Globe } from "lucide-react";
 import type { Locale } from "@/lib/i18n";
 import { getLocaleFromPath, removeLocaleFromPath } from "@/lib/i18n";
+import { cn } from "@/lib/utils";
 
-export function LanguageSwitcher() {
+export type LanguageSwitcherProps = {
+  /** Classes pour le bouton déclencheur (ex. taille réduite dans le header staff). */
+  triggerClassName?: string;
+};
+
+export function LanguageSwitcher({ triggerClassName }: LanguageSwitcherProps) {
   const router = useRouter();
   const pathname = usePathname();
   const [locale, setLocale] = useState<Locale>("fr");
@@ -43,8 +49,12 @@ export function LanguageSwitcher() {
   return (
     <div className="relative">
       <button
+        type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-2 rounded-full border border-foreground/20 bg-background px-4 py-2 text-xs uppercase tracking-[0.15em] text-foreground/70 transition-all hover:border-brand-primary hover:text-brand-primary"
+        className={cn(
+          "flex items-center gap-2 rounded-full border border-foreground/20 bg-background px-4 py-2 text-xs uppercase tracking-[0.15em] text-foreground/70 transition-all hover:border-brand-primary hover:text-brand-primary",
+          triggerClassName,
+        )}
         aria-label="Change language"
       >
         <Globe className="h-4 w-4" />

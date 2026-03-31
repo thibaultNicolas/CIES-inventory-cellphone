@@ -39,7 +39,6 @@ type Submission = {
   condition: string;
   price: number;
   quantity: number;
-  with_insurance: boolean;
   status: SubmissionStatus;
   commission_paid: boolean;
 };
@@ -47,6 +46,8 @@ type Submission = {
 type SubmissionsTableWithFiltersProps = {
   submissions: Submission[];
   hideFilters?: boolean;
+  /** Basculer payé / non payé : super_admin uniquement. */
+  canManageCommissionPaid?: boolean;
 };
 
 function getStatusOptions(t: {
@@ -167,6 +168,7 @@ function formatDate(dateString: string, locale: string) {
 export function SubmissionsTableWithFilters({
   submissions,
   hideFilters = false,
+  canManageCommissionPaid = false,
 }: SubmissionsTableWithFiltersProps) {
   const { t, locale } = useI18n();
   const statusOptions = useMemo(() => getStatusOptions(t.admin), [t.admin]);
@@ -450,7 +452,6 @@ export function SubmissionsTableWithFilters({
                 {t.admin.quantity}
               </TableHead>
               <TableHead className="px-3 sm:px-6">{t.admin.price}</TableHead>
-              <TableHead className="text-center px-3 sm:px-6">{t.admin.shippingProtection}</TableHead>
               <TableHead className="text-center px-3 sm:px-6">{t.admin.status}</TableHead>
               <TableHead className="text-center px-3 sm:px-6">{t.admin.commissionPaid}</TableHead>
               <TableHead className="text-right px-3 sm:px-6">{t.admin.actions}</TableHead>
@@ -459,7 +460,7 @@ export function SubmissionsTableWithFilters({
           <TableBody>
             {filteredSubmissions.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={10} className="px-3 py-6 text-center text-foreground/60 sm:px-6">
+                <TableCell colSpan={9} className="px-3 py-6 text-center text-foreground/60 sm:px-6">
                   {t.admin.noSubmissions}
                 </TableCell>
               </TableRow>
@@ -530,11 +531,6 @@ export function SubmissionsTableWithFilters({
                       </div>
                     </TableCell>
                     <TableCell className="text-center px-3 py-3 sm:px-6 sm:py-4">
-                      <Badge variant={submission.with_insurance ? "secondary" : "outline"}>
-                        {submission.with_insurance ? t.admin.yes : t.admin.no}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-center px-3 py-3 sm:px-6 sm:py-4">
                       <div className="relative inline-flex">
                         <button
                           type="button"
@@ -592,35 +588,57 @@ export function SubmissionsTableWithFilters({
                       </div>
                     </TableCell>
                     <TableCell className="text-center px-3 py-3 sm:px-6 sm:py-4">
-                      <button
-                        type="button"
-                        onClick={() =>
-                          handleToggleCommissionPaid(submission.id, submission.commission_paid)
-                        }
-                        className={`inline-flex items-center gap-1.5 rounded-card border-2 px-3 py-2 text-xs font-medium transition-all ${
-                          submission.commission_paid
-                            ? "border-green-500/50 bg-green-500/10 text-green-700"
-                            : "border-foreground/20 bg-foreground/5 text-foreground/70 hover:border-amber-500/50 hover:bg-amber-500/10 hover:text-amber-700"
-                        }`}
-                        aria-pressed={submission.commission_paid}
-                        aria-label={
-                          submission.commission_paid
-                            ? t.admin.markCommissionUnpaid
-                            : t.admin.markCommissionPaid
-                        }
-                      >
-                        {submission.commission_paid ? (
-                          <>
-                            <CheckCircle className="h-3.5 w-3.5" />
-                            {t.admin.yes}
-                          </>
-                        ) : (
-                          <>
-                            <Clock className="h-3.5 w-3.5" />
-                            {t.admin.no}
-                          </>
-                        )}
-                      </button>
+                      {canManageCommissionPaid ? (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            handleToggleCommissionPaid(submission.id, submission.commission_paid)
+                          }
+                          className={`inline-flex items-center gap-1.5 rounded-card border-2 px-3 py-2 text-xs font-medium transition-all ${
+                            submission.commission_paid
+                              ? "border-green-500/50 bg-green-500/10 text-green-700"
+                              : "border-foreground/20 bg-foreground/5 text-foreground/70 hover:border-amber-500/50 hover:bg-amber-500/10 hover:text-amber-700"
+                          }`}
+                          aria-pressed={submission.commission_paid}
+                          aria-label={
+                            submission.commission_paid
+                              ? t.admin.markCommissionUnpaid
+                              : t.admin.markCommissionPaid
+                          }
+                        >
+                          {submission.commission_paid ? (
+                            <>
+                              <CheckCircle className="h-3.5 w-3.5" />
+                              {t.admin.yes}
+                            </>
+                          ) : (
+                            <>
+                              <Clock className="h-3.5 w-3.5" />
+                              {t.admin.no}
+                            </>
+                          )}
+                        </button>
+                      ) : (
+                        <span
+                          className={`inline-flex items-center gap-1.5 rounded-card border-2 px-3 py-2 text-xs font-medium ${
+                            submission.commission_paid
+                              ? "border-green-500/50 bg-green-500/10 text-green-700"
+                              : "border-foreground/20 bg-foreground/5 text-foreground/70"
+                          }`}
+                        >
+                          {submission.commission_paid ? (
+                            <>
+                              <CheckCircle className="h-3.5 w-3.5" />
+                              {t.admin.yes}
+                            </>
+                          ) : (
+                            <>
+                              <Clock className="h-3.5 w-3.5" />
+                              {t.admin.no}
+                            </>
+                          )}
+                        </span>
+                      )}
                     </TableCell>
                     <TableCell className="text-right px-3 py-3 sm:px-6 sm:py-4">
                       <div className="relative">

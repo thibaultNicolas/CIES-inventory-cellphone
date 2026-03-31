@@ -3,7 +3,6 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import Image from "next/image";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { sortModelsByRecent } from "@/lib/model-sort";
 import { createClient } from "@/lib/supabase-client";
@@ -102,8 +101,6 @@ export function RachatWizard({ brands, models }: RachatWizardProps) {
   const [isLoadingPrice, setIsLoadingPrice] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
-  const [withInsurance, setWithInsurance] = useState(false);
-  const [acceptedPrivacyPolicy, setAcceptedPrivacyPolicy] = useState(false);
   const [formData, setFormData] = useState({
     employeeFullName: "",
     clientFullName: "",
@@ -137,19 +134,14 @@ export function RachatWizard({ brands, models }: RachatWizardProps) {
     () =>
       savedDevices.reduce((sum, device) => {
         const q =
-          typeof device.quantity === "number" && Number.isFinite(device.quantity)
+          typeof device.quantity === "number" &&
+          Number.isFinite(device.quantity)
             ? Math.floor(device.quantity)
             : 1;
         return sum + (q >= 1 ? Math.min(999, q) : 1);
       }, 0),
     [savedDevices],
   );
-  const insurancePrice = 27.99;
-  const totalPriceWithExtras = useMemo(
-    () => Math.max(0, totalSavedPrice - (withInsurance ? insurancePrice : 0)),
-    [totalSavedPrice, withInsurance],
-  );
-
   useEffect(() => {
     if (!selectedModel) {
       return;
@@ -259,7 +251,10 @@ export function RachatWizard({ brands, models }: RachatWizardProps) {
     setStep(3);
   };
 
-  const handleModelSearchSelect = (selection: { brand: Brand; model: Model }) => {
+  const handleModelSearchSelect = (selection: {
+    brand: Brand;
+    model: Model;
+  }) => {
     setSelectedBrand(selection.brand);
     setSelectedModel(selection.model);
     setSelectedCondition(null);
@@ -377,11 +372,6 @@ export function RachatWizard({ brands, models }: RachatWizardProps) {
     e.preventDefault();
     setSubmitError(null);
 
-    if (!acceptedPrivacyPolicy) {
-      alert(t.wizard.acceptPrivacyAlert);
-      return;
-    }
-
     if (savedDevices.length === 0) {
       alert(t.wizard.addOneDevice);
       return;
@@ -393,9 +383,7 @@ export function RachatWizard({ brands, models }: RachatWizardProps) {
       const submitLocale = currentPath.startsWith("/en") ? "en" : "fr";
       const result = await submitRachat({
         contactMode: "store",
-        totalPayout: totalPriceWithExtras,
-        withInsurance,
-        insuranceFee: withInsurance ? insurancePrice : 0,
+        totalPayout: totalSavedPrice,
         devices: savedDevices.map((device) => ({
           modelId: device.modelId,
           brandId: device.brandId,
@@ -423,8 +411,12 @@ export function RachatWizard({ brands, models }: RachatWizardProps) {
       const locale = submitLocale;
       const params = new URLSearchParams({
         id: result.id,
-        total: totalPriceWithExtras.toFixed(2),
+        total: totalSavedPrice.toFixed(2),
       });
+      const viewToken = (result as { viewToken?: string }).viewToken;
+      if (viewToken) {
+        params.set("token", viewToken);
+      }
       if (
         Array.isArray((result as { ids?: string[] }).ids) &&
         (result as { ids?: string[] }).ids?.length
@@ -715,13 +707,16 @@ export function RachatWizard({ brands, models }: RachatWizardProps) {
                                 setIsLoadingPrice(false);
                                 if (
                                   typeof window !== "undefined" &&
-                                  window.matchMedia("(max-width: 767px)").matches
+                                  window.matchMedia("(max-width: 767px)")
+                                    .matches
                                 ) {
                                   window.setTimeout(() => {
-                                    conditionSectionRef.current?.scrollIntoView({
-                                      behavior: "smooth",
-                                      block: "start",
-                                    });
+                                    conditionSectionRef.current?.scrollIntoView(
+                                      {
+                                        behavior: "smooth",
+                                        block: "start",
+                                      },
+                                    );
                                   }, 50);
                                 }
                               }}
@@ -1013,7 +1008,10 @@ export function RachatWizard({ brands, models }: RachatWizardProps) {
                       autoComplete="tel"
                       value={formData.clientPhone}
                       onChange={(e) =>
-                        setFormData({ ...formData, clientPhone: e.target.value })
+                        setFormData({
+                          ...formData,
+                          clientPhone: e.target.value,
+                        })
                       }
                       className="w-full rounded-card border-2 border-transparent bg-[#F5F5F4] px-4 py-3.5 text-base text-foreground transition-all placeholder:text-foreground/40 focus:border-brand-primary focus:bg-background focus:outline-none sm:px-6 sm:py-4"
                       placeholder={t.wizard.form.clientPhonePlaceholder}
@@ -1069,47 +1067,9 @@ export function RachatWizard({ brands, models }: RachatWizardProps) {
                     </p>
                   </div>
 
-                  {/* Privacy notice at collection point (Law 25) */}
-                  <div className="rounded-card border-2 border-brand-primary/20 bg-secondary/50 p-6">
-                    <p className="mb-4 text-sm leading-relaxed text-foreground/80">
-                      {t.wizard.form.dataCollectionNotice}
-                    </p>
-                  </div>
-
-                  <div className="space-y-4">
-                    <label className="flex items-start gap-3 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={acceptedPrivacyPolicy}
-                        onChange={(e) =>
-                          setAcceptedPrivacyPolicy(e.target.checked)
-                        }
-                        required
-                        className="mt-1 h-5 w-5 cursor-pointer rounded border-2 border-foreground/20 text-brand-primary focus:ring-2 focus:ring-brand-primary focus:ring-offset-2"
-                      />
-                      <span className="text-sm leading-relaxed text-foreground">
-                        {t.wizard.form.privacyAccept}{" "}
-                        <Link
-                          href={
-                            locale === "fr"
-                              ? "/politique-de-confidentialite"
-                              : "/en/politique-de-confidentialite"
-                          }
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="font-medium underline transition-colors hover:opacity-80"
-                          style={{ color: "#0026FF" }}
-                        >
-                          {t.wizard.form.privacyPolicy}
-                        </Link>{" "}
-                        {t.wizard.form.privacyAcceptEnd} *
-                      </span>
-                    </label>
-                  </div>
-
                   <button
                     type="submit"
-                    disabled={isSubmitting || !acceptedPrivacyPolicy}
+                    disabled={isSubmitting}
                     className="w-full min-h-[48px] rounded-full bg-brand-dark px-8 py-4 text-center text-sm font-medium uppercase tracking-[0.15em] text-background shadow-lg transition-all duration-300 hover:bg-brand-primary hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 sm:px-12 sm:py-5"
                   >
                     {isSubmitting
@@ -1193,38 +1153,9 @@ export function RachatWizard({ brands, models }: RachatWizardProps) {
                       ))}
                     </div>
 
-                    <div className="mt-4 rounded-2xl border border-foreground/10 bg-secondary/40 p-3">
-                      <p className="mb-2 text-sm font-semibold text-foreground">
-                        {t.wizard.shippingProtectionTitle}
-                      </p>
-                      <p className="mb-3 text-xs leading-relaxed text-foreground/70">
-                        {t.wizard.shippingProtectionDescription}
-                      </p>
-                      <label className="flex cursor-pointer items-center justify-between gap-3">
-                        <span className="text-sm font-medium text-foreground">
-                          {t.wizard.addInsurance}
-                        </span>
-                        <input
-                          type="checkbox"
-                          checked={withInsurance}
-                          onChange={(e) => setWithInsurance(e.target.checked)}
-                          className="h-5 w-5 rounded border-2 border-foreground/25 text-brand-primary focus:ring-2 focus:ring-brand-primary"
-                        />
-                      </label>
-                    </div>
-
-                    {withInsurance && (
-                      <div className="mt-3 flex items-center justify-between text-sm text-foreground/70">
-                        <span>{t.wizard.insurance}</span>
-                        <span className="font-semibold text-brand-primary">
-                          -{insurancePrice.toFixed(2)}$
-                        </span>
-                      </div>
-                    )}
-
                     <div className="mt-6 border-t border-foreground/10 pt-6">
                       <PriceHero
-                        price={totalPriceWithExtras}
+                        price={totalSavedPrice}
                         isLoading={false}
                         currency="CAD"
                       />

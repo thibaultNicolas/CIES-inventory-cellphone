@@ -1,24 +1,20 @@
 import { Suspense } from "react";
-import { createAdminClient } from "@/lib/supabase-server";
 import type { Locale } from "@/lib/i18n";
 import type { SubmissionRow } from "@/lib/submissions";
 import {
   normalizeSubmissionRow,
   submissionLineTotal,
-  SUBMISSIONS_SELECT_SUCCESS,
-  SUBMISSIONS_SELECT_SUCCESS_SCHEMA_ERROR,
 } from "@/lib/submissions";
+import { loadRachatSuccesPageData } from "@/lib/rachat-succes-page-data";
 import { SuccesContent } from "@/components/SuccesContent";
 
 type SearchParams = {
+  token?: string;
   id?: string;
   ids?: string;
   order?: string;
   total?: string;
 };
-
-const SUBMISSIONS_SELECT_SUCCESS_FALLBACK =
-  "id, created_at, brand_name, model_name, memory, condition, price, tracking_number, tracking_url, shipping_label_url";
 
 export default async function SuccesPage({
   searchParams,
@@ -29,93 +25,26 @@ export default async function SuccesPage({
 }) {
   const { locale } = await params;
   const validLocale: Locale = (locale === "fr" || locale === "en") ? locale : "fr";
-  const searchParamsData = await searchParams;
-  const submissionId = searchParamsData.id;
-  const submissionIds =
-    typeof searchParamsData.ids === "string" && searchParamsData.ids.trim() !== ""
-      ? searchParamsData.ids
-          .split(",")
-          .map((id) => id.trim())
-          .filter(Boolean)
-      : [];
-  const orderNumber = searchParamsData.order || submissionId || "";
-  const requestedTotal = searchParamsData.total
-    ? Number(searchParamsData.total)
-    : null;
-
-  const supabase = createAdminClient();
-  let submission = null;
-  let groupedSubmissions: SubmissionRow[] = [];
-
-  if (submissionIds.length > 0) {
-    const { data, error } = await supabase
-      .from("submissions")
-      .select(SUBMISSIONS_SELECT_SUCCESS)
-      .in("id", submissionIds)
-      .order("created_at", { ascending: true });
-
-    if (error && SUBMISSIONS_SELECT_SUCCESS_SCHEMA_ERROR.test(String(error.message))) {
-      const fallback = await supabase
-        .from("submissions")
-        .select(SUBMISSIONS_SELECT_SUCCESS_FALLBACK)
-        .in("id", submissionIds)
-        .order("created_at", { ascending: true });
-      if (!fallback.error && fallback.data?.length) {
-        groupedSubmissions = fallback.data as SubmissionRow[];
-        submission = groupedSubmissions[0];
-      }
-    } else if (!error && data?.length) {
-      groupedSubmissions = data as SubmissionRow[];
-      submission = groupedSubmissions[0];
-    }
-  } else if (submissionId) {
-    const { data, error } = await supabase
-      .from("submissions")
-      .select(SUBMISSIONS_SELECT_SUCCESS)
-      .eq("id", submissionId)
-      .single();
-
-    if (error && SUBMISSIONS_SELECT_SUCCESS_SCHEMA_ERROR.test(String(error.message))) {
-      const fallback = await supabase
-        .from("submissions")
-        .select(SUBMISSIONS_SELECT_SUCCESS_FALLBACK)
-        .eq("id", submissionId)
-        .single();
-      submission = fallback.data;
-    } else {
-      submission = data;
-    }
-
-    if (orderNumber) {
-      const { data: groupedData, error: groupedError } = await supabase
-        .from("submissions")
-        .select(SUBMISSIONS_SELECT_SUCCESS)
-        .eq("request_group_id", orderNumber)
-        .order("created_at", { ascending: true });
-
-      if (groupedError && SUBMISSIONS_SELECT_SUCCESS_SCHEMA_ERROR.test(String(groupedError.message))) {
-        const fallbackGrouped = await supabase
-          .from("submissions")
-          .select(SUBMISSIONS_SELECT_SUCCESS_FALLBACK)
-          .eq("request_group_id", orderNumber)
-          .order("created_at", { ascending: true });
-        if (!fallbackGrouped.error && fallbackGrouped.data?.length) {
-          groupedSubmissions = fallbackGrouped.data as SubmissionRow[];
-        }
-      } else if (!groupedError && groupedData?.length) {
-        groupedSubmissions = groupedData as SubmissionRow[];
-      }
-    }
-  }
+  const sp = await searchParams;
+  const {
+    submission,
+    groupedSubmissions,
+    orderNumber,
+    requestedTotal,
+  } = await loadRachatSuccesPageData({
+    token: sp.token,
+    id: sp.id,
+    ids: sp.ids,
+    order: sp.order,
+    total: sp.total,
+  });
 
   const s = submission ? normalizeSubmissionRow(submission as SubmissionRow) : null;
   const groupedSummary =
     groupedSubmissions.length > 0
-      ? normalizeSubmissionRow(groupedSubmissions[0])
+      ? normalizeSubmissionRow(groupedSubmissions[0] as SubmissionRow)
       : null;
   const shippingSummary = groupedSummary ?? s;
-  const withInsurance = groupedSummary?.with_insurance ?? s?.with_insurance ?? false;
-  const insuranceFee = groupedSummary?.insurance_fee ?? s?.insurance_fee ?? 0;
   const contactSummary = shippingSummary
     ? {
         employee_full_name: shippingSummary.employee_full_name,
@@ -129,7 +58,7 @@ export default async function SuccesPage({
   const orderItems =
     groupedSubmissions.length > 0
       ? groupedSubmissions.map((row) => {
-          const normalized = normalizeSubmissionRow(row);
+          const normalized = normalizeSubmissionRow(row as SubmissionRow);
           return {
             brand_name: normalized.brand_name,
             model_name: normalized.model_name,
@@ -171,8 +100,6 @@ export default async function SuccesPage({
               ? submissionLineTotal(s.price, s.quantity)
               : null)
         }
-        withInsurance={withInsurance}
-        insuranceFee={insuranceFee}
         trackingNumber={shippingSummary?.tracking_number ?? null}
         trackingUrl={shippingSummary?.tracking_url ?? null}
         contactSummary={contactSummary}

@@ -215,6 +215,10 @@ export function RachatFlow({ brands, models }: RachatFlowProps) {
       }
 
       const params = new URLSearchParams({ id: result.id });
+      const viewToken = (result as { viewToken?: string }).viewToken;
+      if (viewToken) {
+        params.set("token", viewToken);
+      }
       if (Array.isArray((result as { ids?: string[] }).ids) && (result as { ids?: string[] }).ids?.length) {
         params.set("ids", (result as { ids: string[] }).ids.join(","));
       }
