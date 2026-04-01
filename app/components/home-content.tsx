@@ -237,7 +237,7 @@ export function HomeContent({ brands = [] }: HomeContentProps) {
   return (
     <>
       <nav
-        className={`fixed left-0 right-0 top-0 z-50 transition-[background-color,box-shadow] duration-300 ease-out ${
+        className={`fixed left-0 right-0 top-14 z-50 transition-[background-color,box-shadow] duration-300 ease-out ${
           navScrolled ? "bg-white shadow-sm" : "bg-transparent"
         }`}
       >
@@ -249,7 +249,7 @@ export function HomeContent({ brands = [] }: HomeContentProps) {
             AcheteTonCell
           </Link>
           {/* Desktop: links + CTA + language */}
-          <div className="hidden flex-wrap items-center justify-end gap-3 md:flex md:gap-6">
+          <div className="hidden flex-wrap items-center justify-end gap-3 sm:flex sm:gap-6">
             <Link
               href={`${getLocalizedPath("/")}#processus`}
               className={`relative text-sm font-medium tracking-wide text-foreground after:absolute after:bottom-0 after:left-0 after:h-0.5 after:w-0 after:bg-current after:transition-[width] after:duration-200 after:content-[''] hover:after:w-full ${
@@ -291,7 +291,7 @@ export function HomeContent({ brands = [] }: HomeContentProps) {
             <LanguageSwitcher />
           </div>
           {/* Mobile: CTA + language + hamburger */}
-          <div className="flex flex-wrap items-center justify-end gap-3 md:hidden">
+          <div className="flex flex-wrap items-center justify-end gap-3 sm:hidden">
             <Link
               href={locale === "fr" ? "/" : `/${locale}`}
               className="rounded-full bg-brand-dark px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-white transition-opacity hover:opacity-90"
@@ -319,7 +319,7 @@ export function HomeContent({ brands = [] }: HomeContentProps) {
         {/* Mobile menu overlay */}
         <div
           id="mobile-nav-menu"
-          className={`fixed inset-0 top-[3.5rem] z-40 md:hidden ${
+          className={`fixed inset-0 top-28 z-40 sm:hidden ${
             mobileMenuOpen ? "visible opacity-100" : "invisible opacity-0"
           } transition-[visibility,opacity] duration-200`}
           aria-hidden={!mobileMenuOpen}
@@ -373,7 +373,7 @@ export function HomeContent({ brands = [] }: HomeContentProps) {
 
       <section
         ref={heroRef}
-        className="relative min-h-screen overflow-hidden pt-20 pb-12 sm:pt-28 sm:pb-20"
+        className="relative min-h-screen overflow-hidden pt-28 pb-12 sm:pt-36 sm:pb-20"
       >
         <div className="mx-auto grid max-w-7xl grid-cols-1 items-center gap-10 px-4 sm:gap-16 sm:px-6 lg:grid-cols-2 lg:gap-20 lg:py-24">
           <div className="flex min-w-0 flex-col justify-center">

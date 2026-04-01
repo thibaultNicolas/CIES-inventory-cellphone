@@ -51,7 +51,8 @@ export function AuthenticatedHeader() {
   };
 
   return (
-    <header className="sticky top-0 z-50 border-b border-foreground/[0.07] bg-background/85 backdrop-blur-xl supports-backdrop-filter:bg-background/70">
+    <>
+    <header className="fixed inset-x-0 top-0 z-100 border-b border-foreground/[0.07] bg-background/85 backdrop-blur-xl supports-backdrop-filter:bg-background/70">
       <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 py-3 sm:gap-4 sm:px-6 sm:py-3.5">
         <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-2 sm:gap-x-4">
           <span className="inline-flex items-center rounded-md border border-foreground/10 bg-foreground/5 px-2.5 py-1 text-[10px] font-semibold uppercase leading-none tracking-[0.16em] text-foreground/50">
@@ -72,47 +73,52 @@ export function AuthenticatedHeader() {
           ) : null}
         </div>
 
-        <div className="hidden shrink-0 items-center gap-2 sm:gap-3 md:flex">
+        <div className="hidden shrink-0 items-center gap-2 sm:gap-3 sm:flex">
           <LanguageSwitcher triggerClassName={compactLang} />
           <LogoutButton className={compactLogout} />
         </div>
 
-        <div className="flex shrink-0 items-center gap-2 md:hidden">
+        <div className="flex shrink-0 items-center gap-2 sm:hidden">
           <LanguageSwitcher triggerClassName={compactLang} />
-          <button
-            type="button"
-            onClick={() => setMenuOpen((o) => !o)}
-            className="flex h-9 w-9 items-center justify-center rounded-lg border border-foreground/12 text-foreground/80 transition-colors hover:bg-foreground/5 sm:h-10 sm:w-10"
-            aria-expanded={menuOpen}
-            aria-controls="staff-header-menu"
-            aria-label={menuOpen ? t.nav.closeMenu : t.nav.openMenu}
-          >
-            {menuOpen ? (
-              <X className="h-5 w-5" aria-hidden />
-            ) : (
-              <Menu className="h-5 w-5" aria-hidden />
-            )}
-          </button>
+          {showAdminTab ? (
+            <button
+              type="button"
+              onClick={() => setMenuOpen((o) => !o)}
+              className="flex h-9 w-9 items-center justify-center rounded-lg border border-foreground/12 text-foreground/80 transition-colors hover:bg-foreground/5 sm:h-10 sm:w-10"
+              aria-expanded={menuOpen}
+              aria-controls="staff-header-menu"
+              aria-label={menuOpen ? t.nav.closeMenu : t.nav.openMenu}
+            >
+              {menuOpen ? (
+                <X className="h-5 w-5" aria-hidden />
+              ) : (
+                <Menu className="h-5 w-5" aria-hidden />
+              )}
+            </button>
+          ) : (
+            <LogoutButton className={compactLogout} />
+          )}
         </div>
       </div>
 
-      {menuOpen ? (
+      {menuOpen && showAdminTab ? (
         <div
           id="staff-header-menu"
-          className="border-t border-foreground/[0.07] bg-background/95 px-4 py-4 md:hidden"
+          className="border-t border-foreground/[0.07] bg-background/95 px-4 py-4 sm:hidden"
         >
-          {showAdminTab ? (
-            <Link
-              href="/admin"
-              className="mb-4 block rounded-lg border border-brand-dark/35 bg-transparent px-4 py-3 text-center text-sm font-semibold uppercase tracking-[0.12em] text-brand-dark transition-colors hover:bg-brand-primary/6"
-              onClick={() => setMenuOpen(false)}
-            >
-              {t.nav.adminDashboard}
-            </Link>
-          ) : null}
+          <Link
+            href="/admin"
+            className="mb-4 block rounded-lg border border-brand-dark/35 bg-transparent px-4 py-3 text-center text-sm font-semibold uppercase tracking-[0.12em] text-brand-dark transition-colors hover:bg-brand-primary/6"
+            onClick={() => setMenuOpen(false)}
+          >
+            {t.nav.adminDashboard}
+          </Link>
           <LogoutButton className="w-full justify-center py-3" />
         </div>
       ) : null}
     </header>
+    {/* Réserve l’espace sous la barre fixe pour ne pas masquer les pages avec nav fixed */}
+    <div className="h-14 w-full shrink-0" aria-hidden />
+    </>
   );
 }

@@ -5,35 +5,20 @@ import { parseAppRole, hasMinRole, type AppRole } from "./src/lib/app-role";
 
 const LOGIN_PATH = "/login";
 
-const PUBLIC_ROOTS = [
-  "/a-propos",
-  "/contact",
-  "/service-aux-entreprises",
-] as const;
-
+/**
+ * Application interne : tout est protégé sauf la page de connexion et les assets
+ * nécessaires au chargement (Next, fichiers dans /public).
+ * Session Supabase + rôle staff (app_metadata.role) requis pour le reste.
+ */
 function isPublicPath(pathname: string): boolean {
   if (pathname === LOGIN_PATH) return true;
   if (pathname.startsWith("/_next")) return true;
-  if (pathname.startsWith("/api")) return true;
-  // Fichiers statiques courants
+  // Fichiers typiques dans `public/` (logos, images) pour /login
   if (
-    /\.(ico|webp|png|jpg|jpeg|svg|gif|txt|xml|webmanifest|json)$/i.test(
-      pathname,
-    )
+    /\.(ico|webp|png|jpg|jpeg|svg|gif|webmanifest|json)$/i.test(pathname)
   ) {
     return true;
   }
-  if (pathname === "/robots.txt" || pathname === "/sitemap.xml") return true;
-
-  // Site public (rachat, pages légales, locales FR/EN)
-  if (pathname === "/" || pathname === "/merci") return true;
-  if (pathname.startsWith("/rachat")) return true;
-  for (const root of PUBLIC_ROOTS) {
-    if (pathname === root || pathname.startsWith(`${root}/`)) return true;
-  }
-  if (pathname === "/en" || pathname.startsWith("/en/")) return true;
-  if (pathname === "/fr" || pathname.startsWith("/fr/")) return true;
-
   return false;
 }
 
@@ -94,4 +79,3 @@ export async function proxy(request: NextRequest) {
 export const config = {
   matcher: ["/((?!_next/static|_next/image|favicon\\.ico|favicon\\.webp).*)"],
 };
-

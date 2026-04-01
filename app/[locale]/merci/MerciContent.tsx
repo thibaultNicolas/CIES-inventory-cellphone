@@ -25,8 +25,8 @@ export function MerciContent({
   const rachatPath = locale === "fr" ? "/" : `/${locale}`;
 
   return (
-    <div className="min-h-screen bg-background pt-20 sm:pt-24">
-      <header className="fixed left-0 right-0 top-0 z-50 bg-background/80 backdrop-blur-md">
+    <div className="min-h-screen bg-background pt-28 sm:pt-32">
+      <header className="fixed left-0 right-0 top-14 z-50 bg-background/80 backdrop-blur-md">
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 py-4 sm:px-6 sm:py-5">
           <Link
             href={homePath}
