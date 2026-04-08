@@ -27,6 +27,11 @@ export async function getActiveCommissionRules(): Promise<CommissionRule[]> {
     .order("min_gross", { ascending: true });
 
   if (error || !data?.length) {
+    if (error) {
+      console.warn("[commission-rules] Falling back to defaults due to DB error:", error.message);
+    } else {
+      console.warn("[commission-rules] No active DB rules found, using defaults.");
+    }
     return DEFAULT_COMMISSION_RULES;
   }
 

@@ -8,6 +8,7 @@ import {
 import { AdminLayout } from "./components/AdminLayout";
 import { getStaff, requireAdmin } from "@/lib/admin-auth";
 import { parseAppRole, type AppRole } from "@/lib/app-role";
+import { applyCommissionFilters } from "@/lib/commission-filters";
 import { redirect } from "next/navigation";
 
 type AdminUser = {
@@ -394,26 +395,7 @@ async function getCommissionsPaginated(
     .from("submissions")
     .select(SUBMISSIONS_SELECT_ADMIN_LIST, { count: "exact" })
     .order("created_at", { ascending: false });
-
-  if (params.fromDate) {
-    const fromIso = `${params.fromDate}T00:00:00.000Z`;
-    query = query.gte("created_at", fromIso);
-  }
-  if (params.toDate) {
-    const toIso = `${params.toDate}T23:59:59.999Z`;
-    query = query.lte("created_at", toIso);
-  }
-  if (params.commissionPaid === "paid") {
-    query = query.eq("commission_paid", true);
-  } else if (params.commissionPaid === "unpaid") {
-    query = query.eq("commission_paid", false);
-  }
-  if (params.employeeFullName) {
-    query = query.eq("employee_full_name", params.employeeFullName);
-  }
-  if (params.storeName) {
-    query = query.eq("store_name", params.storeName);
-  }
+  query = applyCommissionFilters(query, params);
 
   const from = (params.page - 1) * params.pageSize;
   const to = from + params.pageSize - 1;
@@ -425,13 +407,7 @@ async function getCommissionsPaginated(
         .from("submissions")
         .select(SUBMISSIONS_SELECT_ADMIN_LIST_PARTIAL, { count: "exact" })
         .order("created_at", { ascending: false });
-      let fallback = fallbackQuery;
-      if (params.fromDate) {
-        fallback = fallback.gte("created_at", `${params.fromDate}T00:00:00.000Z`);
-      }
-      if (params.toDate) {
-        fallback = fallback.lte("created_at", `${params.toDate}T23:59:59.999Z`);
-      }
+      const fallback = applyCommissionFilters(fallbackQuery, params);
       const fallbackResult = await fallback.range(from, to);
       if (fallbackResult.error) {
         const legacyFallbackQuery = supabase
@@ -439,12 +415,7 @@ async function getCommissionsPaginated(
           .select(SUBMISSIONS_SELECT_ADMIN_LIST_FALLBACK, { count: "exact" })
           .order("created_at", { ascending: false });
         let legacyFallback = legacyFallbackQuery;
-        if (params.fromDate) {
-          legacyFallback = legacyFallback.gte("created_at", `${params.fromDate}T00:00:00.000Z`);
-        }
-        if (params.toDate) {
-          legacyFallback = legacyFallback.lte("created_at", `${params.toDate}T23:59:59.999Z`);
-        }
+        legacyFallback = applyCommissionFilters(legacyFallback, params);
         const legacyResult = await legacyFallback.range(from, to);
         if (legacyResult.error) {
           return {
@@ -642,19 +613,10 @@ async function getCommissionsPaginated(
       .from("submissions")
       .select("commission_employee, commission_manager, commission_owner")
       .eq("commission_paid", false);
-
-    if (params.fromDate) {
-      unpaidQuery = unpaidQuery.gte("created_at", `${params.fromDate}T00:00:00.000Z`);
-    }
-    if (params.toDate) {
-      unpaidQuery = unpaidQuery.lte("created_at", `${params.toDate}T23:59:59.999Z`);
-    }
-    if (params.employeeFullName) {
-      unpaidQuery = unpaidQuery.eq("employee_full_name", params.employeeFullName);
-    }
-    if (params.storeName) {
-      unpaidQuery = unpaidQuery.eq("store_name", params.storeName);
-    }
+    unpaidQuery = applyCommissionFilters(unpaidQuery, {
+      ...params,
+      commissionPaid: "unpaid",
+    });
 
     const unpaidResult = await unpaidQuery;
     if (!unpaidResult.error && unpaidResult.data) {
@@ -682,18 +644,10 @@ async function getCommissionsPaginated(
         .from("submissions")
         .select("id", { count: "exact", head: true })
         .eq("commission_paid", false);
-      if (params.fromDate) {
-        countQuery = countQuery.gte("created_at", `${params.fromDate}T00:00:00.000Z`);
-      }
-      if (params.toDate) {
-        countQuery = countQuery.lte("created_at", `${params.toDate}T23:59:59.999Z`);
-      }
-      if (params.employeeFullName) {
-        countQuery = countQuery.eq("employee_full_name", params.employeeFullName);
-      }
-      if (params.storeName) {
-        countQuery = countQuery.eq("store_name", params.storeName);
-      }
+      countQuery = applyCommissionFilters(countQuery, {
+        ...params,
+        commissionPaid: "unpaid",
+      });
       const countResult = await countQuery;
       if (!countResult.error) {
         unpaidTotal = countResult.count ?? 0;

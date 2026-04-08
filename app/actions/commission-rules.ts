@@ -90,28 +90,19 @@ export async function saveCommissionRules({ rules }: SaveCommissionRulesInput) {
   if (validationError) return { success: false, error: validationError };
 
   const supabase = createAdminClient();
-  const disableOld = await supabase
-    .from("commission_rules")
-    .update({ is_active: false })
-    .eq("is_active", true);
-
-  if (disableOld.error && !/commission_rules|does not exist|relation/i.test(String(disableOld.error.message))) {
-    return { success: false, error: disableOld.error.message };
-  }
-
-  const payload = normalized.map((rule, index) => ({
-    min_gross: rule.minGross,
-    max_gross: rule.maxGross,
-    employee_commission: rule.employeeCommission,
-    manager_commission: rule.managerCommission,
-    owner_commission: rule.ownerCommission,
-    sort_order: index + 1,
-    is_active: true,
-  }));
-
-  const inserted = await supabase.from("commission_rules").insert(payload);
-  if (inserted.error) {
-    return { success: false, error: inserted.error.message };
+  const replaced = await supabase.rpc("replace_commission_rules", {
+    p_rules: normalized,
+  });
+  if (replaced.error) {
+    const message = String(replaced.error.message ?? replaced.error);
+    if (/replace_commission_rules|does not exist|function/i.test(message)) {
+      return {
+        success: false,
+        error:
+          "DB migration missing: run the commission rules RPC migration before saving rules.",
+      };
+    }
+    return { success: false, error: message };
   }
 
   revalidatePath("/admin");

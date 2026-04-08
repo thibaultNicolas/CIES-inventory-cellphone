@@ -3,11 +3,17 @@ import { requireAdmin } from "@/lib/admin-auth";
 import { createAdminClient } from "@/lib/supabase-server";
 import type { SubmissionRow } from "@/lib/submissions";
 import { normalizeSubmissionRow, submissionLineTotal } from "@/lib/submissions";
+import { applyCommissionFilters } from "@/lib/commission-filters";
 
 function esc(value: unknown): string {
   const s = value == null ? "" : String(value);
   if (/[",\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
   return s;
+}
+
+function sanitizeSpreadsheetCell(value: unknown): string {
+  const s = value == null ? "" : String(value);
+  return /^[=+\-@]/.test(s) ? `'${s}` : s;
 }
 
 function formatCsvDate(input: string): string {
@@ -44,40 +50,12 @@ export async function GET(request: Request) {
 
   const supabase = createAdminClient();
   const pageSize = 1000;
-  const rows: SubmissionRow[] = [];
+  const filename =
+    scope === "all"
+      ? `commissions-all-${new Date().toISOString().slice(0, 10)}.csv`
+      : `commissions-filtered-${new Date().toISOString().slice(0, 10)}.csv`;
 
-  for (let page = 0; ; page += 1) {
-    const start = page * pageSize;
-    const end = start + pageSize - 1;
-    let q = supabase
-      .from("submissions")
-      .select(
-        "id,request_group_id,created_at,status,employee_full_name,store_name,client_full_name,customer_name,brand_name,model_name,memory,condition,price,quantity,commission_paid,commission_employee,commission_manager,commission_owner",
-      )
-      .order("created_at", { ascending: false })
-      .range(start, end);
-
-    if (scope === "filtered") {
-      if (from) q = q.gte("created_at", `${from}T00:00:00.000Z`);
-      if (to) q = q.lte("created_at", `${to}T23:59:59.999Z`);
-      if (commissionPaid === "paid") q = q.eq("commission_paid", true);
-      if (commissionPaid === "unpaid") q = q.eq("commission_paid", false);
-      if (employee) q = q.eq("employee_full_name", employee);
-      if (store) q = q.eq("store_name", store);
-    }
-
-    const { data, error } = await q;
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
-    }
-
-    const batch = (data || []) as SubmissionRow[];
-    rows.push(...batch);
-    if (batch.length < pageSize) break;
-  }
-
-  const dataLines: string[] = [];
-  dataLines.push(
+  const header =
     [
       "Date transaction",
       "ID commande",
@@ -98,49 +76,89 @@ export async function GET(request: Request) {
       "Commission totale",
       "Statut",
       "Commission payee",
-    ].join(","),
-  );
+    ].join(",") + "\n";
 
-  for (const row of rows) {
-    const s = normalizeSubmissionRow(row);
-    const lineTotal = submissionLineTotal(s.price, s.quantity);
-    const cEmployee = Number(s.commission_employee ?? 0);
-    const cManager = Number(s.commission_manager ?? 0);
-    const cOwner = Number(s.commission_owner ?? 0);
-    const cTotal = cEmployee + cManager + cOwner;
+  const stream = new ReadableStream({
+    async start(controller) {
+      try {
+        controller.enqueue(new TextEncoder().encode(header));
 
-    dataLines.push(
-      [
-        esc(formatCsvDate(s.created_at)),
-        esc(s.request_group_id ?? s.id),
-        esc(s.id),
-        esc(s.employee_full_name),
-        esc(s.store_name),
-        esc(s.client_full_name || s.customer_name),
-        esc(s.brand_name),
-        esc(s.model_name),
-        esc(s.memory),
-        esc(s.condition),
-        esc(s.quantity),
-        esc(s.price.toFixed(2)),
-        esc(lineTotal.toFixed(2)),
-        esc(cEmployee.toFixed(2)),
-        esc(cManager.toFixed(2)),
-        esc(cOwner.toFixed(2)),
-        esc(cTotal.toFixed(2)),
-        esc(s.status),
-        esc(s.commission_paid ? "Oui" : "Non"),
-      ].join(","),
-    );
-  }
+        for (let page = 0; ; page += 1) {
+          const start = page * pageSize;
+          const end = start + pageSize - 1;
+          let q = supabase
+            .from("submissions")
+            .select(
+              "id,request_group_id,created_at,status,employee_full_name,store_name,client_full_name,customer_name,brand_name,model_name,memory,condition,price,quantity,commission_paid,commission_employee,commission_manager,commission_owner",
+            )
+            .order("created_at", { ascending: false })
+            .range(start, end);
 
-  const csv = dataLines.join("\n");
-  const filename =
-    scope === "all"
-      ? `commissions-all-${new Date().toISOString().slice(0, 10)}.csv`
-      : `commissions-filtered-${new Date().toISOString().slice(0, 10)}.csv`;
+          if (scope === "filtered") {
+            q = applyCommissionFilters(q as never, {
+              fromDate: from,
+              toDate: to,
+              commissionPaid:
+                commissionPaid === "paid" || commissionPaid === "unpaid"
+                  ? commissionPaid
+                  : "all",
+              employeeFullName: employee,
+              storeName: store,
+            }) as typeof q;
+          }
 
-  return new NextResponse(csv, {
+          const { data, error } = await q;
+          if (error) {
+            throw new Error(error.message);
+          }
+
+          const batch = (data || []) as SubmissionRow[];
+          if (batch.length === 0) break;
+
+          let chunk = "";
+          for (const row of batch) {
+            const s = normalizeSubmissionRow(row);
+            const lineTotal = submissionLineTotal(s.price, s.quantity);
+            const cEmployee = Number(s.commission_employee ?? 0);
+            const cManager = Number(s.commission_manager ?? 0);
+            const cOwner = Number(s.commission_owner ?? 0);
+            const cTotal = cEmployee + cManager + cOwner;
+
+            chunk +=
+              [
+                esc(formatCsvDate(s.created_at)),
+                esc(sanitizeSpreadsheetCell(s.request_group_id ?? s.id)),
+                esc(sanitizeSpreadsheetCell(s.id)),
+                esc(sanitizeSpreadsheetCell(s.employee_full_name)),
+                esc(sanitizeSpreadsheetCell(s.store_name)),
+                esc(sanitizeSpreadsheetCell(s.client_full_name || s.customer_name)),
+                esc(sanitizeSpreadsheetCell(s.brand_name)),
+                esc(sanitizeSpreadsheetCell(s.model_name)),
+                esc(sanitizeSpreadsheetCell(s.memory)),
+                esc(sanitizeSpreadsheetCell(s.condition)),
+                esc(s.quantity),
+                esc(s.price.toFixed(2)),
+                esc(lineTotal.toFixed(2)),
+                esc(cEmployee.toFixed(2)),
+                esc(cManager.toFixed(2)),
+                esc(cOwner.toFixed(2)),
+                esc(cTotal.toFixed(2)),
+                esc(sanitizeSpreadsheetCell(s.status)),
+                esc(s.commission_paid ? "Oui" : "Non"),
+              ].join(",") + "\n";
+          }
+
+          controller.enqueue(new TextEncoder().encode(chunk));
+          if (batch.length < pageSize) break;
+        }
+        controller.close();
+      } catch (e) {
+        controller.error(e);
+      }
+    },
+  });
+
+  return new NextResponse(stream, {
     status: 200,
     headers: {
       "Content-Type": "text/csv; charset=utf-8",
