@@ -1,21 +1,28 @@
 "use client";
 
 import { useMemo } from "react";
-import { Users, ShoppingBag, Package, DollarSign } from "lucide-react";
+import { Users, ShoppingBag, Package, DollarSign, Building2 } from "lucide-react";
 import { useI18n } from "@/contexts/I18nContext";
 
-type AdminSection = "comptes" | "demandes" | "produits" | "commissions";
+type AdminSection =
+  | "comptes"
+  | "referentiel"
+  | "demandes"
+  | "produits"
+  | "commissions";
 
 type AdminSidebarProps = {
   activeSection: AdminSection;
   onSectionChange: (section: AdminSection) => void;
   showAccountsSection?: boolean;
+  showProductsSection?: boolean;
 };
 
 export function AdminSidebar({
   activeSection,
   onSectionChange,
   showAccountsSection = false,
+  showProductsSection = false,
 }: AdminSidebarProps) {
   const { t } = useI18n();
 
@@ -24,11 +31,18 @@ export function AdminSidebar({
       ...(showAccountsSection
         ? [{ id: "comptes" as const, label: t.admin.accounts, icon: Users }]
         : []),
+      {
+        id: "referentiel" as const,
+        label: t.admin.reference,
+        icon: Building2,
+      },
       { id: "demandes" as const, label: t.admin.tradeInRequests, icon: ShoppingBag },
       { id: "commissions" as const, label: t.admin.commissions, icon: DollarSign },
-      { id: "produits" as const, label: t.admin.products, icon: Package },
+      ...(showProductsSection
+        ? [{ id: "produits" as const, label: t.admin.products, icon: Package }]
+        : []),
     ],
-    [t.admin, showAccountsSection]
+    [t.admin, showAccountsSection, showProductsSection]
   );
 
   return (

@@ -17,7 +17,9 @@ export type OrderDetailSubmission = {
   request_group_id: string | null;
   created_at: string;
   employee_full_name: string;
+  store_name: string;
   client_full_name: string;
+  client_account_number: string;
   client_city: string;
   device_imei: string;
   customer_name: string;
@@ -42,6 +44,9 @@ export type OrderDetailSubmission = {
   shipping_label_error?: string | null;
   status: SubmissionStatus;
   commission_paid: boolean;
+  commission_employee?: number | null;
+  commission_manager?: number | null;
+  commission_owner?: number | null;
 };
 
 type OrderDetailProps = {
@@ -105,6 +110,10 @@ export function OrderDetail({
   } | null>(null);
 
   const summary = useMemo(() => {
+    const toAmount = (value: unknown) => {
+      const n = typeof value === "number" ? value : Number(value ?? 0);
+      return Number.isFinite(n) ? n : 0;
+    };
     const sortedByDate = [...submissions].sort((a, b) =>
       a.created_at < b.created_at ? -1 : 1,
     );
@@ -118,14 +127,34 @@ export function OrderDetail({
     const commissionPaidCount = submissions.filter(
       (s) => s.commission_paid,
     ).length;
+    const employeeCommissionTotal = submissions.reduce(
+      (sum, s) => sum + toAmount(s.commission_employee),
+      0,
+    );
+    const managerCommissionTotal = submissions.reduce(
+      (sum, s) => sum + toAmount(s.commission_manager),
+      0,
+    );
+    const ownerCommissionTotal = submissions.reduce(
+      (sum, s) => sum + toAmount(s.commission_owner),
+      0,
+    );
+    const commissionsTotal =
+      employeeCommissionTotal + managerCommissionTotal + ownerCommissionTotal;
     const netTotal = devicesTotal;
+    const totalWithCommissions = devicesTotal + commissionsTotal;
 
     return {
       first,
       overallStatus,
       devicesTotal,
       orderUnitsTotal,
+      employeeCommissionTotal,
+      managerCommissionTotal,
+      ownerCommissionTotal,
+      commissionsTotal,
       netTotal,
+      totalWithCommissions,
       commissionPaidCount,
     };
   }, [submissions]);
@@ -152,6 +181,8 @@ export function OrderDetail({
   const customer = summary.first
     ? {
         employeeName: summary.first.employee_full_name,
+        storeName: summary.first.store_name,
+        clientAccountNumber: summary.first.client_account_number,
         clientName: summary.first.client_full_name || summary.first.customer_name,
         phone: summary.first.customer_phone,
         city: summary.first.client_city || summary.first.customer_address || "",
@@ -161,6 +192,8 @@ export function OrderDetail({
       }
     : {
         employeeName: "",
+        storeName: "",
+        clientAccountNumber: "",
         clientName: "—",
         phone: "—",
         city: "",
@@ -499,12 +532,30 @@ export function OrderDetail({
                   <div className="font-medium text-foreground">{customer.employeeName}</div>
                 </div>
               ) : null}
+              {customer.storeName ? (
+                <div>
+                  <div className="text-xs font-medium uppercase tracking-[0.12em] text-foreground/60">
+                    {t.admin.storeNameLabel}
+                  </div>
+                  <div className="text-foreground/90">{customer.storeName}</div>
+                </div>
+              ) : null}
               <div>
                 <div className="text-xs font-medium uppercase tracking-[0.12em] text-foreground/60">
                   {t.admin.clientFullNameLabel}
                 </div>
                 <div className="font-medium text-foreground">{customer.clientName}</div>
               </div>
+              {customer.clientAccountNumber ? (
+                <div>
+                  <div className="text-xs font-medium uppercase tracking-[0.12em] text-foreground/60">
+                    {t.admin.clientAccountNumberLabel}
+                  </div>
+                  <div className="font-mono text-sm text-foreground/90">
+                    {customer.clientAccountNumber}
+                  </div>
+                </div>
+              ) : null}
               <div>
                 <div className="text-xs font-medium uppercase tracking-[0.12em] text-foreground/60">
                   {t.admin.clientPhoneLabel}
@@ -693,12 +744,45 @@ export function OrderDetail({
                 </span>
               </div>
               <div className="my-2 border-t border-foreground/10" />
+              <div className="flex items-center justify-between text-foreground/70">
+                <span>{t.admin.employeeCommission}</span>
+                <span className="font-medium text-foreground">
+                  {summary.employeeCommissionTotal.toFixed(2)}$
+                </span>
+              </div>
+              <div className="flex items-center justify-between text-foreground/70">
+                <span>{t.admin.managerCommission}</span>
+                <span className="font-medium text-foreground">
+                  {summary.managerCommissionTotal.toFixed(2)}$
+                </span>
+              </div>
+              <div className="flex items-center justify-between text-foreground/70">
+                <span>{t.admin.ownerCommission}</span>
+                <span className="font-medium text-foreground">
+                  {summary.ownerCommissionTotal.toFixed(2)}$
+                </span>
+              </div>
+              <div className="flex items-center justify-between text-foreground/70">
+                <span>{t.admin.totalCommissionsLabel}</span>
+                <span className="font-medium text-foreground">
+                  {summary.commissionsTotal.toFixed(2)}$
+                </span>
+              </div>
+              <div className="my-2 border-t border-foreground/10" />
               <div className="flex items-center justify-between">
                 <span className="font-semibold text-foreground">
                   {t.admin.totalLabel}
                 </span>
                 <span className="font-semibold text-brand-primary">
                   {summary.netTotal.toFixed(2)}$
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="font-semibold text-foreground">
+                  {t.admin.totalWithCommissionsLabel}
+                </span>
+                <span className="font-semibold text-brand-primary">
+                  {summary.totalWithCommissions.toFixed(2)}$
                 </span>
               </div>
               <div className="text-xs text-foreground/60">

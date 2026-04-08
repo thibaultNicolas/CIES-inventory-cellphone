@@ -42,12 +42,14 @@ export default async function SuccesPage({
   const shippingSummary = groupedSummary ?? s;
   const contactSummary = shippingSummary
     ? {
-        employee_full_name: shippingSummary.employee_full_name,
-        client_full_name: shippingSummary.client_full_name,
-        customer_phone: shippingSummary.customer_phone,
-        client_city: shippingSummary.client_city,
-        device_imei: shippingSummary.device_imei,
-        customer_email: shippingSummary.customer_email,
+        employee_full_name: shippingSummary.employee_full_name ?? "",
+        store_name: shippingSummary.store_name ?? "",
+        client_full_name: shippingSummary.client_full_name ?? "",
+        client_account_number: shippingSummary.client_account_number ?? "",
+        customer_phone: shippingSummary.customer_phone ?? "",
+        client_city: shippingSummary.client_city ?? "",
+        device_imei: shippingSummary.device_imei ?? "",
+        customer_email: shippingSummary.customer_email ?? "",
       }
     : null;
   const orderItems =

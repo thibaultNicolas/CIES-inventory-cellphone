@@ -29,7 +29,6 @@ import {
   X,
 } from "lucide-react";
 import { useI18n } from "@/contexts/I18nContext";
-import { LanguageSwitcher } from "./LanguageSwitcher";
 import type { BrandForHome } from "@/lib/brands";
 
 gsap.registerPlugin(ScrollTrigger);
@@ -57,7 +56,7 @@ function useFadeInSection(opts?: { rootMargin?: string; threshold?: number }) {
 }
 
 const GOOGLE_MAPS_URL =
-  "https://www.google.com/maps/place/Achetetoncell/@46.8121712,-71.2993801,17z/data=!3m1!4b1!4m6!3m5!1s0x4cb8976a59d4f2bf:0xebde10f37156b907!8m2!3d46.8121712!4d-71.2993801!16s%2Fg%2F11w_wc38jx?entry=ttu";
+  "https://www.google.com/maps?q=46.8121712,-71.2993801";
 
 type HomeContentProps = {
   brands?: BrandForHome[];
@@ -242,11 +241,8 @@ export function HomeContent({ brands = [] }: HomeContentProps) {
         }`}
       >
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 py-3 sm:px-6 sm:py-4">
-          <Link
-            href={getLocalizedPath("/")}
-            className="shrink-0 font-(family-name:--font-playfair) text-xl font-semibold tracking-tight text-brand-dark transition-colors hover:text-brand-primary sm:text-2xl"
-          >
-            AcheteTonCell
+          <Link href={getLocalizedPath("/")} className="sr-only">
+            Accueil
           </Link>
           {/* Desktop: links + CTA + language */}
           <div className="hidden flex-wrap items-center justify-end gap-3 sm:flex sm:gap-6">
@@ -288,7 +284,6 @@ export function HomeContent({ brands = [] }: HomeContentProps) {
             >
               {t.nav.getPrice}
             </Link>
-            <LanguageSwitcher />
           </div>
           {/* Mobile: CTA + language + hamburger */}
           <div className="flex flex-wrap items-center justify-end gap-3 sm:hidden">
@@ -298,7 +293,6 @@ export function HomeContent({ brands = [] }: HomeContentProps) {
             >
               {t.nav.getPrice}
             </Link>
-            <LanguageSwitcher />
             <button
               type="button"
               onClick={() => setMobileMenuOpen((o) => !o)}
@@ -1163,11 +1157,8 @@ export function Footer() {
         <div className="grid grid-cols-1 gap-10 md:grid-cols-3 md:gap-8">
           {/* Column 1: Nom + tagline + social */}
           <div className="flex flex-col gap-4">
-            <Link
-              href={getLocalizedPath("/")}
-              className="w-fit shrink-0 font-(family-name:--font-playfair) text-2xl font-semibold tracking-tight text-brand-dark"
-            >
-              AcheteTonCell
+            <Link href={getLocalizedPath("/")} className="sr-only">
+              Accueil
             </Link>
             <p className="max-w-xs text-sm leading-relaxed text-black/80">
               {t.footer.tagline}

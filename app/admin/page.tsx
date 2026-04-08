@@ -1,6 +1,10 @@
 import { createAdminClient, createCachedClient } from "@/lib/supabase-server";
 import type { SubmissionRow, SubmissionStatus } from "@/lib/submissions";
-import { normalizeSubmissionRow, SUBMISSIONS_SELECT_ADMIN_LIST } from "@/lib/submissions";
+import {
+  normalizeSubmissionRow,
+  SUBMISSIONS_SELECT_ADMIN_LIST,
+  submissionLineTotal,
+} from "@/lib/submissions";
 import { AdminLayout } from "./components/AdminLayout";
 import { getStaff, requireAdmin } from "@/lib/admin-auth";
 import { parseAppRole, type AppRole } from "@/lib/app-role";
@@ -34,7 +38,9 @@ type Submission = {
   request_group_id: string | null;
   created_at: string;
   employee_full_name: string;
+  store_name: string;
   client_full_name: string;
+  client_account_number: string;
   client_city: string;
   device_imei: string;
   customer_name: string;
@@ -59,21 +65,44 @@ type Submission = {
   shipping_label_error?: string | null;
   status: SubmissionStatus;
   commission_paid: boolean;
+  commission_employee?: number | null;
+  commission_manager?: number | null;
+  commission_owner?: number | null;
 };
 
 type SearchParams = {
   section?: string;
   tab?: string;
   order?: string;
+  /** Orders list pagination */
+  ordersPage?: string;
+  ordersPageSize?: string;
   /** Commissions: pagination & filters */
   commissionPage?: string;
   commissionPageSize?: string;
   commissionFrom?: string;
   commissionTo?: string;
   commissionPaid?: string;
+  commissionEmployee?: string;
+  commissionStore?: string;
 };
 
-type AdminSection = "comptes" | "demandes" | "produits" | "commissions";
+type EmployeeRef = {
+  id: string;
+  full_name: string;
+};
+
+type StoreRef = {
+  id: string;
+  name: string;
+};
+
+type AdminSection =
+  | "comptes"
+  | "referentiel"
+  | "demandes"
+  | "produits"
+  | "commissions";
 
 type Price = {
   id: string;
@@ -108,7 +137,7 @@ async function getSubmissions(): Promise<Submission[]> {
   if (error) {
     const message = String((error as { message?: string }).message ?? error);
     const needsFallback =
-      /commission_paid|request_group_id|customer_address|employee_full_name|client_full_name|client_city|device_imei|price_override_previous|price_override_reason|price_override_updated_at|price_override_updated_by|quantity|column.*does not exist/i.test(
+      /commission_paid|commission_employee|commission_manager|commission_owner|request_group_id|customer_address|employee_full_name|store_name|client_full_name|client_account_number|client_city|device_imei|price_override_previous|price_override_reason|price_override_updated_at|price_override_updated_by|quantity|column.*does not exist/i.test(
         message,
       );
 
@@ -148,7 +177,9 @@ async function getSubmissions(): Promise<Submission[]> {
       request_group_id: s.request_group_id ?? null,
       created_at: s.created_at,
       employee_full_name: s.employee_full_name,
+      store_name: s.store_name,
       client_full_name: s.client_full_name,
+      client_account_number: s.client_account_number,
       client_city: s.client_city,
       device_imei: s.device_imei,
       customer_name: s.customer_name,
@@ -173,6 +204,9 @@ async function getSubmissions(): Promise<Submission[]> {
       price_override_updated_by: s.price_override_updated_by ?? null,
       status: s.status,
       commission_paid: s.commission_paid,
+      commission_employee: s.commission_employee,
+      commission_manager: s.commission_manager,
+      commission_owner: s.commission_owner,
     };
   });
 }
@@ -292,6 +326,30 @@ async function getPrices() {
   return all;
 }
 
+async function getEmployees(): Promise<EmployeeRef[]> {
+  const supabase = createAdminClient();
+  const { data, error } = await supabase
+    .from("employees")
+    .select("id, full_name")
+    .eq("is_active", true)
+    .order("full_name", { ascending: true });
+
+  if (error) return [];
+  return data || [];
+}
+
+async function getStores(): Promise<StoreRef[]> {
+  const supabase = createAdminClient();
+  const { data, error } = await supabase
+    .from("stores")
+    .select("id, name")
+    .eq("is_active", true)
+    .order("name", { ascending: true });
+
+  if (error) return [];
+  return data || [];
+}
+
 const COMMISSIONS_DEFAULT_PAGE_SIZE = 20;
 
 type GetCommissionsParams = {
@@ -300,17 +358,30 @@ type GetCommissionsParams = {
   fromDate: string;
   toDate: string;
   commissionPaid: "all" | "paid" | "unpaid";
+  employeeFullName: string;
+  storeName: string;
 };
 
 type CommissionsResult = {
   submissions: Submission[];
   total: number;
   unpaidTotal: number;
+  unpaidEmployeeTotal: number;
+  unpaidManagerTotal: number;
+  unpaidOwnerTotal: number;
+  globalYearUnitsTotal: number;
+  globalYearBuybackTotal: number;
+  globalYearEmployeeCommissionTotal: number;
+  globalYearManagerCommissionTotal: number;
+  globalYearOwnerCommissionTotal: number;
+  globalYearCommissionTotal: number;
   page: number;
   pageSize: number;
   fromDate: string;
   toDate: string;
   commissionPaid: "all" | "paid" | "unpaid";
+  employeeFullName: string;
+  storeName: string;
 };
 
 async function getCommissionsPaginated(
@@ -337,13 +408,19 @@ async function getCommissionsPaginated(
   } else if (params.commissionPaid === "unpaid") {
     query = query.eq("commission_paid", false);
   }
+  if (params.employeeFullName) {
+    query = query.eq("employee_full_name", params.employeeFullName);
+  }
+  if (params.storeName) {
+    query = query.eq("store_name", params.storeName);
+  }
 
   const from = (params.page - 1) * params.pageSize;
   const to = from + params.pageSize - 1;
   const { data, error, count } = await query.range(from, to);
 
   if (error) {
-    if (/commission_paid|request_group_id|employee_full_name|client_full_name|client_city|device_imei|quantity|column.*does not exist/i.test(String(error.message))) {
+    if (/commission_paid|commission_employee|commission_manager|commission_owner|request_group_id|employee_full_name|store_name|client_full_name|client_account_number|client_city|device_imei|quantity|column.*does not exist/i.test(String(error.message))) {
       const fallbackQuery = supabase
         .from("submissions")
         .select(SUBMISSIONS_SELECT_ADMIN_LIST_PARTIAL, { count: "exact" })
@@ -374,11 +451,22 @@ async function getCommissionsPaginated(
             submissions: [],
             total: 0,
             unpaidTotal: 0,
+            unpaidEmployeeTotal: 0,
+            unpaidManagerTotal: 0,
+            unpaidOwnerTotal: 0,
+            globalYearUnitsTotal: 0,
+            globalYearBuybackTotal: 0,
+            globalYearEmployeeCommissionTotal: 0,
+            globalYearManagerCommissionTotal: 0,
+            globalYearOwnerCommissionTotal: 0,
+            globalYearCommissionTotal: 0,
             page: params.page,
             pageSize: params.pageSize,
             fromDate: params.fromDate,
             toDate: params.toDate,
             commissionPaid: "all",
+            employeeFullName: params.employeeFullName,
+            storeName: params.storeName,
           };
         }
         const legacyRows = (legacyResult.data || []) as SubmissionRow[];
@@ -389,7 +477,9 @@ async function getCommissionsPaginated(
             request_group_id: s.request_group_id ?? null,
             created_at: s.created_at,
             employee_full_name: s.employee_full_name,
+            store_name: s.store_name,
             client_full_name: s.client_full_name,
+            client_account_number: s.client_account_number,
             client_city: s.client_city,
             device_imei: s.device_imei,
             customer_name: s.customer_name,
@@ -404,17 +494,31 @@ async function getCommissionsPaginated(
             quantity: s.quantity,
             status: s.status,
             commission_paid: false,
+            commission_employee: 0,
+            commission_manager: 0,
+            commission_owner: 0,
           };
         });
         return {
           submissions: legacySubmissions,
           total: legacyResult.count ?? 0,
           unpaidTotal: legacyResult.count ?? 0,
+          unpaidEmployeeTotal: 0,
+          unpaidManagerTotal: 0,
+          unpaidOwnerTotal: 0,
+          globalYearUnitsTotal: 0,
+          globalYearBuybackTotal: 0,
+          globalYearEmployeeCommissionTotal: 0,
+          globalYearManagerCommissionTotal: 0,
+          globalYearOwnerCommissionTotal: 0,
+          globalYearCommissionTotal: 0,
           page: params.page,
           pageSize: params.pageSize,
           fromDate: params.fromDate,
           toDate: params.toDate,
           commissionPaid: "all",
+          employeeFullName: params.employeeFullName,
+          storeName: params.storeName,
         };
       }
       const rows = (fallbackResult.data || []) as SubmissionRow[];
@@ -425,7 +529,9 @@ async function getCommissionsPaginated(
           request_group_id: s.request_group_id ?? null,
           created_at: s.created_at,
           employee_full_name: s.employee_full_name,
+          store_name: s.store_name,
           client_full_name: s.client_full_name,
+          client_account_number: s.client_account_number,
           client_city: s.client_city,
           device_imei: s.device_imei,
           customer_name: s.customer_name,
@@ -440,28 +546,53 @@ async function getCommissionsPaginated(
           quantity: s.quantity,
           status: s.status,
           commission_paid: false,
+          commission_employee: 0,
+          commission_manager: 0,
+          commission_owner: 0,
         };
       });
       return {
         submissions,
         total: fallbackResult.count ?? 0,
         unpaidTotal: fallbackResult.count ?? 0,
+        unpaidEmployeeTotal: 0,
+        unpaidManagerTotal: 0,
+        unpaidOwnerTotal: 0,
+        globalYearUnitsTotal: 0,
+        globalYearBuybackTotal: 0,
+        globalYearEmployeeCommissionTotal: 0,
+        globalYearManagerCommissionTotal: 0,
+        globalYearOwnerCommissionTotal: 0,
+        globalYearCommissionTotal: 0,
         page: params.page,
         pageSize: params.pageSize,
         fromDate: params.fromDate,
         toDate: params.toDate,
         commissionPaid: "all",
+        employeeFullName: params.employeeFullName,
+        storeName: params.storeName,
       };
     }
     return {
       submissions: [],
       total: 0,
       unpaidTotal: 0,
+      unpaidEmployeeTotal: 0,
+      unpaidManagerTotal: 0,
+      unpaidOwnerTotal: 0,
+      globalYearUnitsTotal: 0,
+      globalYearBuybackTotal: 0,
+      globalYearEmployeeCommissionTotal: 0,
+      globalYearManagerCommissionTotal: 0,
+      globalYearOwnerCommissionTotal: 0,
+      globalYearCommissionTotal: 0,
       page: params.page,
       pageSize: params.pageSize,
       fromDate: params.fromDate,
       toDate: params.toDate,
       commissionPaid: params.commissionPaid,
+      employeeFullName: params.employeeFullName,
+      storeName: params.storeName,
     };
   }
 
@@ -473,7 +604,9 @@ async function getCommissionsPaginated(
       request_group_id: s.request_group_id ?? null,
       created_at: s.created_at,
       employee_full_name: s.employee_full_name,
+      store_name: s.store_name,
       client_full_name: s.client_full_name,
+      client_account_number: s.client_account_number,
       client_city: s.client_city,
       device_imei: s.device_imei,
       customer_name: s.customer_name,
@@ -488,14 +621,26 @@ async function getCommissionsPaginated(
       quantity: s.quantity,
       status: s.status,
       commission_paid: s.commission_paid,
+      commission_employee: s.commission_employee,
+      commission_manager: s.commission_manager,
+      commission_owner: s.commission_owner,
     };
   });
 
   let unpaidTotal = 0;
+  let unpaidEmployeeTotal = 0;
+  let unpaidManagerTotal = 0;
+  let unpaidOwnerTotal = 0;
+  let globalYearUnitsTotal = 0;
+  let globalYearBuybackTotal = 0;
+  let globalYearEmployeeCommissionTotal = 0;
+  let globalYearManagerCommissionTotal = 0;
+  let globalYearOwnerCommissionTotal = 0;
+  let globalYearCommissionTotal = 0;
   try {
     let unpaidQuery = supabase
       .from("submissions")
-      .select("quantity")
+      .select("commission_employee, commission_manager, commission_owner")
       .eq("commission_paid", false);
 
     if (params.fromDate) {
@@ -504,12 +649,30 @@ async function getCommissionsPaginated(
     if (params.toDate) {
       unpaidQuery = unpaidQuery.lte("created_at", `${params.toDate}T23:59:59.999Z`);
     }
+    if (params.employeeFullName) {
+      unpaidQuery = unpaidQuery.eq("employee_full_name", params.employeeFullName);
+    }
+    if (params.storeName) {
+      unpaidQuery = unpaidQuery.eq("store_name", params.storeName);
+    }
 
     const unpaidResult = await unpaidQuery;
     if (!unpaidResult.error && unpaidResult.data) {
       unpaidTotal = unpaidResult.data.reduce((sum, row) => {
         const s = normalizeSubmissionRow(row as SubmissionRow);
-        return sum + s.quantity;
+        return sum + s.commission_employee + s.commission_manager + s.commission_owner;
+      }, 0);
+      unpaidEmployeeTotal = unpaidResult.data.reduce((sum, row) => {
+        const s = normalizeSubmissionRow(row as SubmissionRow);
+        return sum + s.commission_employee;
+      }, 0);
+      unpaidManagerTotal = unpaidResult.data.reduce((sum, row) => {
+        const s = normalizeSubmissionRow(row as SubmissionRow);
+        return sum + s.commission_manager;
+      }, 0);
+      unpaidOwnerTotal = unpaidResult.data.reduce((sum, row) => {
+        const s = normalizeSubmissionRow(row as SubmissionRow);
+        return sum + s.commission_owner;
       }, 0);
     } else if (
       unpaidResult.error &&
@@ -525,6 +688,12 @@ async function getCommissionsPaginated(
       if (params.toDate) {
         countQuery = countQuery.lte("created_at", `${params.toDate}T23:59:59.999Z`);
       }
+      if (params.employeeFullName) {
+        countQuery = countQuery.eq("employee_full_name", params.employeeFullName);
+      }
+      if (params.storeName) {
+        countQuery = countQuery.eq("store_name", params.storeName);
+      }
       const countResult = await countQuery;
       if (!countResult.error) {
         unpaidTotal = countResult.count ?? 0;
@@ -532,17 +701,64 @@ async function getCommissionsPaginated(
     }
   } catch {
     unpaidTotal = 0;
+    unpaidEmployeeTotal = 0;
+    unpaidManagerTotal = 0;
+    unpaidOwnerTotal = 0;
+  }
+
+  try {
+    const year = new Date().getUTCFullYear();
+    const fromYear = `${year}-01-01T00:00:00.000Z`;
+    const toYear = `${year + 1}-01-01T00:00:00.000Z`;
+    const globalResult = await supabase
+      .from("submissions")
+      .select("price, quantity, commission_employee, commission_manager, commission_owner")
+      .gte("created_at", fromYear)
+      .lt("created_at", toYear);
+    if (!globalResult.error && globalResult.data) {
+      for (const row of globalResult.data as SubmissionRow[]) {
+        const s = normalizeSubmissionRow(row);
+        const lineTotal = submissionLineTotal(s.price, s.quantity);
+        globalYearUnitsTotal += s.quantity;
+        globalYearBuybackTotal += lineTotal;
+        globalYearEmployeeCommissionTotal += s.commission_employee;
+        globalYearManagerCommissionTotal += s.commission_manager;
+        globalYearOwnerCommissionTotal += s.commission_owner;
+      }
+      globalYearCommissionTotal =
+        globalYearOwnerCommissionTotal +
+        globalYearEmployeeCommissionTotal +
+        globalYearManagerCommissionTotal;
+    }
+  } catch {
+    globalYearUnitsTotal = 0;
+    globalYearBuybackTotal = 0;
+    globalYearEmployeeCommissionTotal = 0;
+    globalYearManagerCommissionTotal = 0;
+    globalYearOwnerCommissionTotal = 0;
+    globalYearCommissionTotal = 0;
   }
 
   return {
     submissions,
     total: count ?? 0,
     unpaidTotal,
+    unpaidEmployeeTotal,
+    unpaidManagerTotal,
+    unpaidOwnerTotal,
+    globalYearUnitsTotal,
+    globalYearBuybackTotal,
+    globalYearEmployeeCommissionTotal,
+    globalYearManagerCommissionTotal,
+    globalYearOwnerCommissionTotal,
+    globalYearCommissionTotal,
     page: params.page,
     pageSize: params.pageSize,
     fromDate: params.fromDate,
     toDate: params.toDate,
     commissionPaid: params.commissionPaid,
+    employeeFullName: params.employeeFullName,
+    storeName: params.storeName,
   };
 }
 
@@ -563,19 +779,28 @@ export default async function AdminPage({
   const sp = (await searchParams) || {};
   const requestedSection: AdminSection =
     sp.section === "comptes" ||
+    sp.section === "referentiel" ||
     sp.section === "demandes" ||
     sp.section === "produits" ||
     sp.section === "commissions"
       ? sp.section
       : "demandes";
 
-  if (requestedSection === "comptes" && admin.role !== "super_admin") {
+  if (
+    (requestedSection === "comptes" || requestedSection === "produits") &&
+    admin.role !== "super_admin"
+  ) {
     redirect("/admin?section=demandes");
   }
 
   const section = requestedSection;
   const tab = sp.tab === "brands" || sp.tab === "models" || sp.tab === "prices" ? sp.tab : "brands";
   const selectedOrder = typeof sp.order === "string" && sp.order.trim() !== "" ? sp.order.trim() : null;
+  const ordersPage = Math.max(1, parseInt(sp.ordersPage ?? "1", 10) || 1);
+  const ordersPageSize = Math.min(
+    100,
+    Math.max(5, parseInt(sp.ordersPageSize ?? "20", 10) || 20),
+  );
 
   const commissionPage = Math.max(1, parseInt(sp.commissionPage ?? "1", 10) || 1);
   const commissionPageSize = Math.min(
@@ -588,14 +813,18 @@ export default async function AdminPage({
     sp.commissionPaid === "paid" || sp.commissionPaid === "unpaid"
       ? sp.commissionPaid
       : "all";
+  const commissionEmployee = sp.commissionEmployee ?? "";
+  const commissionStore = sp.commissionStore ?? "";
 
-  const [submissions, adminUsers, brands, models, prices, commissionsData] =
+  const [submissions, adminUsers, brands, models, prices, employees, stores, commissionsData] =
     await Promise.all([
       getSubmissions(),
       admin.role === "super_admin" ? getAdminUsers() : Promise.resolve([] as AdminUser[]),
       getBrands(),
       getModels(),
       getPrices(),
+      getEmployees(),
+      getStores(),
       section === "commissions"
         ? getCommissionsPaginated({
             page: commissionPage,
@@ -603,6 +832,8 @@ export default async function AdminPage({
             fromDate: commissionFrom,
             toDate: commissionTo,
             commissionPaid,
+            employeeFullName: commissionEmployee,
+            storeName: commissionStore,
           })
         : Promise.resolve(null),
     ]);
@@ -612,13 +843,20 @@ export default async function AdminPage({
     {
       orderId: string;
       created_at: string;
+      model_names: Set<string>;
+      gross_total: number;
       customer_name: string;
       customer_email: string;
       customer_phone: string;
       client_city: string;
       device_imei: string;
       employee_full_name: string;
+      store_name: string;
+      client_account_number: string;
       statuses: Set<SubmissionStatus>;
+      commission_employee_total: number;
+      commission_manager_total: number;
+      commission_owner_total: number;
     }
   >();
 
@@ -629,13 +867,20 @@ export default async function AdminPage({
       ordersById.set(orderId, {
         orderId,
         created_at: s.created_at,
+        model_names: new Set([s.model_name].filter(Boolean)),
+        gross_total: submissionLineTotal(s.price, s.quantity),
         customer_name: s.client_full_name || s.customer_name,
         customer_email: s.customer_email,
         customer_phone: s.customer_phone,
         client_city: s.client_city,
         device_imei: s.device_imei,
         employee_full_name: s.employee_full_name,
+        store_name: s.store_name,
+        client_account_number: s.client_account_number,
         statuses: new Set([s.status]),
+        commission_employee_total: Number(s.commission_employee ?? 0),
+        commission_manager_total: Number(s.commission_manager ?? 0),
+        commission_owner_total: Number(s.commission_owner ?? 0),
       });
       continue;
     }
@@ -643,9 +888,19 @@ export default async function AdminPage({
     if (s.created_at < existing.created_at) {
       existing.created_at = s.created_at;
     }
+    if (s.model_name) {
+      existing.model_names.add(s.model_name);
+    }
+    existing.gross_total += submissionLineTotal(s.price, s.quantity);
 
     if (!existing.employee_full_name && s.employee_full_name) {
       existing.employee_full_name = s.employee_full_name;
+    }
+    if (!existing.store_name && s.store_name) {
+      existing.store_name = s.store_name;
+    }
+    if (!existing.client_account_number && s.client_account_number) {
+      existing.client_account_number = s.client_account_number;
     }
     if (!existing.client_city && s.client_city) {
       existing.client_city = s.client_city;
@@ -655,12 +910,29 @@ export default async function AdminPage({
     }
 
     existing.statuses.add(s.status);
+    existing.commission_employee_total += Number(s.commission_employee ?? 0);
+    existing.commission_manager_total += Number(s.commission_manager ?? 0);
+    existing.commission_owner_total += Number(s.commission_owner ?? 0);
   }
 
-  const orders = Array.from(ordersById.values()).map(({ statuses, ...order }) => ({
-    ...order,
-    status: normalizeOverallOrderStatus(statuses),
-  }));
+  const allOrders = Array.from(ordersById.values())
+    .map(({ statuses, model_names, ...order }) => {
+      const models = Array.from(model_names).filter(Boolean);
+      const model_summary =
+        models.length <= 1 ? (models[0] ?? "—") : `${models[0]} +${models.length - 1}`;
+      return {
+        ...order,
+        model_summary,
+        status: normalizeOverallOrderStatus(statuses),
+      };
+    })
+    .sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
+
+  const totalOrders = allOrders.length;
+  const totalOrdersPages = Math.max(1, Math.ceil(totalOrders / ordersPageSize));
+  const safeOrdersPage = Math.min(ordersPage, totalOrdersPages);
+  const ordersStart = (safeOrdersPage - 1) * ordersPageSize;
+  const orders = allOrders.slice(ordersStart, ordersStart + ordersPageSize);
 
   const orderSubmissions =
     section === "demandes" && selectedOrder
@@ -671,6 +943,10 @@ export default async function AdminPage({
     <AdminLayout
       submissions={submissions}
       orders={orders}
+      ordersPage={safeOrdersPage}
+      ordersPageSize={ordersPageSize}
+      totalOrders={totalOrders}
+      totalOrdersPages={totalOrdersPages}
       selectedOrder={section === "demandes" ? selectedOrder : null}
       orderSubmissions={orderSubmissions}
       adminUsers={adminUsers}
@@ -680,6 +956,8 @@ export default async function AdminPage({
       initialSection={section}
       initialProductsTab={tab}
       commissionsData={commissionsData}
+      employees={employees}
+      stores={stores}
       canManageStaffAccounts={admin.role === "super_admin"}
       viewerRole={admin.role}
     />

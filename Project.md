@@ -1,8 +1,8 @@
-# AcheteTonCell — Project Summary
+# Project Summary
 
 ## Overview
 
-**AcheteTonCell** is a web application that lets customers **sell their used cellphones** (buyback / _rachat_) to the business. Users select device brand/model, condition, and storage; get an instant price quote; add one or more devices to a cart; then submit their contact and shipping details. The platform handles submission storage, optional shipping labels (ClickShip), and an admin dashboard to manage requests, products, and users. Transactional email is not used; the team follows up outside the app.
+This web application lets customers **sell their used cellphones** (buyback / _rachat_) to the business. Users select device brand/model, condition, and storage; get an instant price quote; add one or more devices to a cart; then submit their contact and shipping details. The platform handles submission storage, optional shipping labels (ClickShip), and an admin dashboard to manage requests, products, and users. Transactional email is not used; the team follows up outside the app.
 
 **Business flow:** Customer → Select device(s) → Get price(s) → Enter contact/shipping → Submit → Admin processes request (status, PDF bordereau, contact for shipping, etc.).
 
@@ -155,4 +155,4 @@ Submissions are grouped by `request_group_id` for multi-device orders. RLS unifi
 
 ---
 
-_This document summarizes the AcheteTonCell codebase as of the current implementation. Pour RLS, SQL manuel et notes Loi 25 : `scripts/README.md` et `README.md` à la racine._
+_This document summarizes the current codebase as of the current implementation. Pour RLS, SQL manuel et notes Loi 25 : `scripts/README.md` et `README.md` à la racine._

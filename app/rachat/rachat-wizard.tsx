@@ -50,6 +50,8 @@ function sortMemoryCapacities(memories: string[]): string[] {
 type RachatWizardProps = {
   brands: Brand[];
   models: Model[];
+  employees: { id: string; full_name: string }[];
+  stores: { id: string; name: string }[];
 };
 
 type SelectedDevice = {
@@ -86,7 +88,12 @@ const slideVariants = {
   }),
 };
 
-export function RachatWizard({ brands, models }: RachatWizardProps) {
+export function RachatWizard({
+  brands,
+  models,
+  employees,
+  stores,
+}: RachatWizardProps) {
   const [step, setStep] = useState(1);
   const [direction, setDirection] = useState(1);
   const [selectedBrand, setSelectedBrand] = useState<Brand | null>(null);
@@ -102,13 +109,14 @@ export function RachatWizard({ brands, models }: RachatWizardProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [formData, setFormData] = useState({
-    employeeFullName: "",
+    employeeId: "",
+    storeName: "",
     clientFullName: "",
+    clientAccountNumber: "",
     clientPhone: "",
-    clientCity: "",
     deviceImei: "",
   });
-  const { t, locale } = useI18n();
+  const { t } = useI18n();
   const router = useRouter();
   const hasStepMounted = useRef(false);
   const memoriesRequestRef = useRef(0);
@@ -395,10 +403,11 @@ export function RachatWizard({ brands, models }: RachatWizardProps) {
           quantity: device.quantity,
           devicePhotos: [],
         })),
-        employeeFullName: formData.employeeFullName,
+        employeeId: formData.employeeId,
+        storeName: formData.storeName,
         clientFullName: formData.clientFullName,
+        clientAccountNumber: formData.clientAccountNumber,
         clientPhone: formData.clientPhone,
-        clientCity: formData.clientCity,
         deviceImei: formData.deviceImei,
         locale: submitLocale,
       });
@@ -949,26 +958,58 @@ export function RachatWizard({ brands, models }: RachatWizardProps) {
                 >
                   <div>
                     <label
-                      htmlFor="employee-full-name"
+                      htmlFor="employee-select"
                       className="mb-2 block text-sm font-medium text-foreground"
                     >
-                      {t.wizard.form.employeeFullName} *
+                      {t.wizard.form.selectEmployeeLabel} *
                     </label>
-                    <input
-                      type="text"
-                      id="employee-full-name"
+                    <select
+                      id="employee-select"
                       required
-                      autoComplete="name"
-                      value={formData.employeeFullName}
+                      value={formData.employeeId}
                       onChange={(e) =>
                         setFormData({
                           ...formData,
-                          employeeFullName: e.target.value,
+                          employeeId: e.target.value,
                         })
                       }
-                      className="w-full rounded-card border-2 border-transparent bg-[#F5F5F4] px-4 py-3.5 text-base text-foreground transition-all placeholder:text-foreground/40 focus:border-brand-primary focus:bg-background focus:outline-none sm:px-6 sm:py-4"
-                      placeholder={t.wizard.form.employeeFullNamePlaceholder}
-                    />
+                      className="w-full rounded-card border-2 border-transparent bg-[#F5F5F4] px-4 py-3.5 text-base text-foreground transition-all focus:border-brand-primary focus:bg-background focus:outline-none sm:px-6 sm:py-4"
+                    >
+                      <option value="">{t.wizard.form.selectEmployeePlaceholder}</option>
+                      {employees.map((employee) => (
+                        <option key={employee.id} value={employee.id}>
+                          {employee.full_name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label
+                      htmlFor="store-name"
+                      className="mb-2 block text-sm font-medium text-foreground"
+                    >
+                      {t.wizard.form.storeName} *
+                    </label>
+                    <select
+                      id="store-name"
+                      required
+                      value={formData.storeName}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          storeName: e.target.value,
+                        })
+                      }
+                      className="w-full rounded-card border-2 border-transparent bg-[#F5F5F4] px-4 py-3.5 text-base text-foreground transition-all focus:border-brand-primary focus:bg-background focus:outline-none sm:px-6 sm:py-4"
+                    >
+                      <option value="">{t.wizard.form.selectStore}</option>
+                      {stores.map((store) => (
+                        <option key={store.id} value={store.name}>
+                          {store.name}
+                        </option>
+                      ))}
+                    </select>
                   </div>
 
                   <div>
@@ -1020,21 +1061,24 @@ export function RachatWizard({ brands, models }: RachatWizardProps) {
 
                   <div>
                     <label
-                      htmlFor="client-city"
+                      htmlFor="client-account-number"
                       className="mb-2 block text-sm font-medium text-foreground"
                     >
-                      {t.wizard.form.clientCity} *
+                      {t.wizard.form.clientAccountNumber} *
                     </label>
                     <input
                       type="text"
-                      id="client-city"
+                      id="client-account-number"
                       required
-                      value={formData.clientCity}
+                      value={formData.clientAccountNumber}
                       onChange={(e) =>
-                        setFormData({ ...formData, clientCity: e.target.value })
+                        setFormData({
+                          ...formData,
+                          clientAccountNumber: e.target.value,
+                        })
                       }
                       className="w-full rounded-card border-2 border-transparent bg-[#F5F5F4] px-4 py-3.5 text-base text-foreground transition-all placeholder:text-foreground/40 focus:border-brand-primary focus:bg-background focus:outline-none sm:px-6 sm:py-4"
-                      placeholder={t.wizard.form.clientCityPlaceholder}
+                      placeholder={t.wizard.form.clientAccountNumberPlaceholder}
                     />
                   </div>
 

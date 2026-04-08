@@ -11,6 +11,9 @@ import {
 import { checkRateLimit } from "@/lib/rate-limit-memory";
 import { getRequestIpForRateLimit } from "@/lib/request-ip";
 import { isUuid, signRachatViewToken } from "@/lib/rachat-view-token";
+import { computeCommissionFromGross } from "@/lib/commission-policy";
+import { submissionLineTotal } from "@/lib/submissions";
+import { getActiveCommissionRules } from "@/lib/commission-rules-server";
 
 type SubmitRachatDevice = {
   modelId: string;
@@ -53,7 +56,11 @@ type SubmitRachatData = {
   /** `store` = formulaire magasin (employé, client, ville, IMEI). `legacy` = courriel + adresse complète. */
   contactMode?: "store" | "legacy";
   employeeFullName?: string;
+  /** UUID de la ligne `employees` (formulaire magasin). */
+  employeeId?: string;
+  storeName?: string;
   clientFullName?: string;
+  clientAccountNumber?: string;
   clientPhone?: string;
   clientCity?: string;
   deviceImei?: string;
@@ -68,8 +75,13 @@ type SubmitRachatData = {
 type ResolvedContact =
   | {
       ok: true;
+      /** Renseigné pour le mode legacy ; en mode magasin, complété après résolution par `employee_id`. */
       employee_full_name: string;
+      /** Mode magasin : UUID employé dans `employees`. */
+      employee_id: string | null;
+      store_name: string;
       client_full_name: string;
+      client_account_number: string;
       client_city: string;
       device_imei: string;
       customer_name: string;
@@ -88,25 +100,31 @@ function resolveSubmitContact(data: SubmitRachatData): ResolvedContact {
       : "Veuillez remplir tous les champs obligatoires.";
 
   if (data.contactMode === "store") {
-    const employee_full_name = (data.employeeFullName ?? "").trim();
+    const employee_id = (data.employeeId ?? "").trim();
+    const store_name = (data.storeName ?? "").trim();
     const client_full_name = (data.clientFullName ?? "").trim();
+    const client_account_number = (data.clientAccountNumber ?? "").trim();
     const client_phone = (data.clientPhone ?? "").trim();
     const client_city = (data.clientCity ?? "").trim();
     const device_imei = (data.deviceImei ?? "").trim();
     if (
-      !employee_full_name ||
+      !employee_id ||
+      !store_name ||
       !client_full_name ||
+      !client_account_number ||
       !client_phone ||
-      !client_city ||
       !device_imei
     ) {
       return { ok: false, error: missing };
     }
     return {
       ok: true,
-      employee_full_name,
+      employee_full_name: "",
+      employee_id,
+      store_name,
       client_full_name,
-      client_city,
+      client_account_number,
+      client_city: client_city || store_name,
       device_imei,
       customer_name: client_full_name,
       customer_email: "",
@@ -126,7 +144,10 @@ function resolveSubmitContact(data: SubmitRachatData): ResolvedContact {
   return {
     ok: true,
     employee_full_name: "",
+    employee_id: null,
+    store_name: "",
     client_full_name: customer_name,
+    client_account_number: "",
     client_city: customer_address,
     device_imei: "",
     customer_name,
@@ -135,6 +156,30 @@ function resolveSubmitContact(data: SubmitRachatData): ResolvedContact {
     customer_address,
     clickShipFormattedAddress: customer_address,
   };
+}
+
+async function resolveEmployeeFullNameById(employeeId: string): Promise<string | null> {
+  if (!isUuid(employeeId)) return null;
+  const supabase = createAdminClient();
+  const { data, error } = await supabase
+    .from("employees")
+    .select("full_name")
+    .eq("id", employeeId)
+    .eq("is_active", true)
+    .maybeSingle();
+  if (error || !data?.full_name) return null;
+  return String(data.full_name).trim();
+}
+
+async function storeExists(storeName: string): Promise<boolean> {
+  const supabase = createAdminClient();
+  const { data, error } = await supabase
+    .from("stores")
+    .select("id")
+    .eq("name", storeName)
+    .eq("is_active", true)
+    .maybeSingle();
+  return !error && Boolean(data?.id);
 }
 
 async function enforceCatalogForDevices(
@@ -312,11 +357,54 @@ export async function submitRachat(data: SubmitRachatData) {
     return { success: false, error: contact.error, id: null };
   }
 
+  let resolvedEmployeeFullName = contact.ok ? contact.employee_full_name : "";
+  if (contact.ok && data.contactMode === "store") {
+    if (!contact.employee_id || !isUuid(contact.employee_id)) {
+      return {
+        success: false,
+        error:
+          lang === "en"
+            ? "Please fill in all required fields."
+            : "Veuillez remplir tous les champs obligatoires.",
+        id: null,
+      };
+    }
+    const employeeFullName = await resolveEmployeeFullNameById(contact.employee_id);
+    if (!employeeFullName) {
+      return {
+        success: false,
+        error:
+          lang === "en" ? "Invalid employee selection." : "Sélection d’employé invalide.",
+        id: null,
+      };
+    }
+    resolvedEmployeeFullName = employeeFullName;
+
+    const isValidStore = await storeExists(contact.store_name);
+    if (!isValidStore) {
+      return {
+        success: false,
+        error: lang === "en" ? "Invalid store." : "Magasin invalide.",
+        id: null,
+      };
+    }
+  }
+
   const requestGroupId = data.requestGroupId || crypto.randomUUID();
+  const commissionRules = await getActiveCommissionRules();
 
   const supabase = createAdminClient();
 
   const payloads = devices.map((device) => ({
+    ...(function () {
+      const gross = submissionLineTotal(device.price, clampSubmissionQuantity(device.quantity));
+      const commission = computeCommissionFromGross(gross, commissionRules);
+      return {
+        commission_employee: commission.employee,
+        commission_manager: commission.manager,
+        commission_owner: commission.owner,
+      };
+    })(),
     request_group_id: requestGroupId,
     model_id: device.modelId,
     brand_id: device.brandId,
@@ -326,8 +414,10 @@ export async function submitRachat(data: SubmitRachatData) {
     memory: device.memory,
     price: device.price,
     quantity: clampSubmissionQuantity(device.quantity),
-    employee_full_name: contact.employee_full_name,
+    employee_full_name: resolvedEmployeeFullName,
+    store_name: contact.store_name || null,
     client_full_name: contact.client_full_name,
+    client_account_number: contact.client_account_number || null,
     client_city: contact.client_city,
     device_imei: contact.device_imei,
     customer_name: contact.customer_name,
@@ -367,16 +457,28 @@ export async function submitRachat(data: SubmitRachatData) {
     insertPayloads = payloads.map((payload) => {
       const nextPayload = { ...payload } as Record<string, unknown>;
       if (
-        /employee_full_name|client_full_name|client_city|device_imei/i.test(msg) &&
+        /employee_full_name|store_name|client_full_name|client_account_number|client_city|device_imei/i.test(
+          msg,
+        ) &&
         /does not exist/i.test(msg)
       ) {
         delete nextPayload.employee_full_name;
+        delete nextPayload.store_name;
         delete nextPayload.client_full_name;
+        delete nextPayload.client_account_number;
         delete nextPayload.client_city;
         delete nextPayload.device_imei;
       }
       if (/quantity/i.test(msg) && /does not exist/i.test(msg)) {
         delete nextPayload.quantity;
+      }
+      if (
+        /commission_employee|commission_manager|commission_owner/i.test(msg) &&
+        /does not exist/i.test(msg)
+      ) {
+        delete nextPayload.commission_employee;
+        delete nextPayload.commission_manager;
+        delete nextPayload.commission_owner;
       }
       if (msg.includes("request_group_id")) {
         delete nextPayload.request_group_id;
@@ -394,10 +496,14 @@ export async function submitRachat(data: SubmitRachatData) {
     const canDropRequestGroup = msg.includes("request_group_id");
     const canDropQuantity = /quantity/i.test(msg) && /does not exist/i.test(msg);
     const canDropTradeIn =
-      /employee_full_name|client_full_name|client_city|device_imei/i.test(msg) &&
+      /employee_full_name|store_name|client_full_name|client_account_number|client_city|device_imei/i.test(
+        msg,
+      ) && /does not exist/i.test(msg);
+    const canDropCommissions =
+      /commission_employee|commission_manager|commission_owner/i.test(msg) &&
       /does not exist/i.test(msg);
 
-    if (canDropRequestGroup || canDropQuantity || canDropTradeIn) {
+    if (canDropRequestGroup || canDropQuantity || canDropTradeIn || canDropCommissions) {
       if (canDropRequestGroup && devices.length > 1) {
         return {
           success: false,
@@ -418,9 +524,16 @@ export async function submitRachat(data: SubmitRachatData) {
         }
         if (canDropTradeIn) {
           delete nextPayload.employee_full_name;
+          delete nextPayload.store_name;
           delete nextPayload.client_full_name;
+          delete nextPayload.client_account_number;
           delete nextPayload.client_city;
           delete nextPayload.device_imei;
+        }
+        if (canDropCommissions) {
+          delete nextPayload.commission_employee;
+          delete nextPayload.commission_manager;
+          delete nextPayload.commission_owner;
         }
         return nextPayload;
       });

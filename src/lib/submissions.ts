@@ -14,8 +14,10 @@ export type SubmissionNormalized = {
   quantity: number;
   /** Nom complet de l’employé (magasin). */
   employee_full_name: string;
+  store_name: string;
   /** Nom complet du client final. */
   client_full_name: string;
+  client_account_number: string;
   /** Ville (client / transaction). */
   client_city: string;
   /** IMEI de l’appareil. */
@@ -41,6 +43,9 @@ export type SubmissionNormalized = {
   shipping_label_error?: string | null;
   /** True when your commission for this order has been paid */
   commission_paid: boolean;
+  commission_employee: number;
+  commission_manager: number;
+  commission_owner: number;
   /** Previous price before last override (if any) */
   price_override_previous?: number | null;
   /** Reason for price override (if any) */
@@ -71,7 +76,9 @@ export type SubmissionRow = {
   price: number | string | null;
   quantity?: number | string | null;
   employee_full_name?: string | null;
+  store_name?: string | null;
   client_full_name?: string | null;
+  client_account_number?: string | null;
   client_city?: string | null;
   device_imei?: string | null;
   customer_name: string | null;
@@ -86,6 +93,9 @@ export type SubmissionRow = {
   shipping_label_status?: string | null;
   shipping_label_error?: string | null;
   commission_paid?: boolean | null;
+  commission_employee?: number | string | null;
+  commission_manager?: number | string | null;
+  commission_owner?: number | string | null;
   price_override_previous?: number | string | null;
   price_override_reason?: string | null;
   price_override_updated_at?: string | null;
@@ -95,10 +105,10 @@ export type SubmissionRow = {
 // Canonical `submissions` column lists to avoid `.select("*")`.
 // Keep these in sync with the DB schema.
 export const SUBMISSIONS_SELECT_ADMIN_LIST =
-  "id, request_group_id, created_at, status, brand_name, model_name, memory, condition, price, quantity, employee_full_name, client_full_name, client_city, device_imei, customer_name, customer_email, customer_phone, customer_address, clickship_shipment_id, tracking_number, tracking_url, shipping_label_url, shipping_label_status, shipping_label_error, commission_paid, price_override_previous, price_override_reason, price_override_updated_at, price_override_updated_by";
+  "id, request_group_id, created_at, status, brand_name, model_name, memory, condition, price, quantity, employee_full_name, store_name, client_full_name, client_account_number, client_city, device_imei, customer_name, customer_email, customer_phone, customer_address, clickship_shipment_id, tracking_number, tracking_url, shipping_label_url, shipping_label_status, shipping_label_error, commission_paid, commission_employee, commission_manager, commission_owner, price_override_previous, price_override_reason, price_override_updated_at, price_override_updated_by";
 
 export const SUBMISSIONS_SELECT_SUMMARY =
-  "id, created_at, brand_name, model_name, memory, condition, price, quantity, employee_full_name, client_full_name, client_city, device_imei, customer_name, customer_phone, customer_address";
+  "id, created_at, brand_name, model_name, memory, condition, price, quantity, employee_full_name, store_name, client_full_name, client_account_number, client_city, device_imei, customer_name, customer_phone, customer_address";
 
 /** Page merci : uniquement le récap affiché (pas de PII en base si possible). */
 export const SUBMISSIONS_SELECT_MERCI_MINIMAL =
@@ -106,17 +116,17 @@ export const SUBMISSIONS_SELECT_MERCI_MINIMAL =
 
 /** Summary + shipping fields for confirmation/success page */
 export const SUBMISSIONS_SELECT_SUCCESS =
-  "id, created_at, brand_name, model_name, memory, condition, price, quantity, employee_full_name, client_full_name, client_city, device_imei, clickship_shipment_id, tracking_number, tracking_url, shipping_label_url, shipping_label_status, shipping_label_error";
+  "id, created_at, brand_name, model_name, memory, condition, price, quantity, employee_full_name, store_name, client_full_name, client_account_number, client_city, device_imei, customer_email, clickship_shipment_id, tracking_number, tracking_url, shipping_label_url, shipping_label_status, shipping_label_error";
 
 /** When PostgREST rejects `SUBMISSIONS_SELECT_SUCCESS`, retry with `SUBMISSIONS_SELECT_SUCCESS_FALLBACK`. */
 export const SUBMISSIONS_SELECT_SUCCESS_SCHEMA_ERROR =
-  /request_group_id|quantity|employee_full_name|client_full_name|client_city|device_imei|clickship_shipment_id|shipping_label_status|shipping_label_error|column.*does not exist/i;
+  /request_group_id|quantity|employee_full_name|store_name|client_full_name|client_account_number|client_city|device_imei|clickship_shipment_id|shipping_label_status|shipping_label_error|column.*does not exist/i;
 
 export const SUBMISSIONS_SELECT_PDF =
-  "id, created_at, brand_name, model_name, memory, condition, price, quantity, employee_full_name, client_full_name, client_city, device_imei, customer_name, customer_email, customer_phone, customer_address";
+  "id, created_at, brand_name, model_name, memory, condition, price, quantity, employee_full_name, store_name, client_full_name, client_account_number, client_city, device_imei, customer_name, customer_email, customer_phone, customer_address";
 
 export const SUBMISSIONS_SELECT_CANONICAL =
-  "id, created_at, status, brand_id, model_id, brand_name, model_name, memory, condition, price, quantity, employee_full_name, client_full_name, client_city, device_imei, customer_name, customer_email, customer_phone, customer_address, device_photos";
+  "id, created_at, status, brand_id, model_id, brand_name, model_name, memory, condition, price, quantity, employee_full_name, store_name, client_full_name, client_account_number, client_city, device_imei, customer_name, customer_email, customer_phone, customer_address, device_photos";
 
 /** Total pour une ligne (prix unitaire × quantité). */
 export function submissionLineTotal(
@@ -178,8 +188,10 @@ export function normalizeSubmissionRow(row: SubmissionRow): SubmissionNormalized
   const quantity = qtyRaw >= 1 ? Math.min(999, Math.floor(qtyRaw)) : 1;
 
   const employee_full_name = asString(row.employee_full_name);
+  const store_name = asString(row.store_name);
   const client_full_name =
     asString(row.client_full_name) || asString(row.customer_name);
+  const client_account_number = asString(row.client_account_number);
   const client_city =
     asString(row.client_city) || asString(row.customer_address);
   const device_imei = asString(row.device_imei);
@@ -215,7 +227,9 @@ export function normalizeSubmissionRow(row: SubmissionRow): SubmissionNormalized
     price,
     quantity,
     employee_full_name,
+    store_name,
     client_full_name,
+    client_account_number,
     client_city,
     device_imei,
     customer_name,
@@ -232,6 +246,9 @@ export function normalizeSubmissionRow(row: SubmissionRow): SubmissionNormalized
     shipping_label_status,
     shipping_label_error,
     commission_paid,
+    commission_employee: asNumber(row.commission_employee),
+    commission_manager: asNumber(row.commission_manager),
+    commission_owner: asNumber(row.commission_owner),
     price_override_previous:
       row.price_override_previous == null ? null : asNumber(row.price_override_previous),
     price_override_reason: asString(row.price_override_reason) || null,

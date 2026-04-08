@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { useState, useTransition } from "react";
 import {
   Table,
   TableBody,
@@ -14,7 +15,7 @@ import { updateCommissionPaid } from "../../actions/update-commission-paid";
 import { useI18n } from "@/contexts/I18nContext";
 import type { CommissionsData } from "./AdminLayout";
 import { submissionLineTotal } from "@/lib/submissions";
-import { Filter, Smartphone, DollarSign, CheckCircle, Clock, ChevronLeft, ChevronRight, Coins } from "lucide-react";
+import { Filter, Smartphone, CheckCircle, Clock, ChevronLeft, ChevronRight, Coins } from "lucide-react";
 
 type PeriodPreset =
   | "all"
@@ -28,6 +29,7 @@ type PeriodPreset =
   | "custom";
 
 type CommissionPaidFilter = "all" | "paid" | "unpaid";
+type CommissionTypeFilter = "all" | "employee" | "manager" | "owner";
 
 function startOfDay(date: Date) {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate(), 0, 0, 0, 0);
@@ -100,6 +102,8 @@ function buildCommissionsQuery(params: {
   from?: string;
   to?: string;
   commissionPaid?: CommissionPaidFilter;
+  employeeFullName?: string;
+  storeName?: string;
   periodPreset?: PeriodPreset;
 }) {
   const search = new URLSearchParams();
@@ -111,21 +115,50 @@ function buildCommissionsQuery(params: {
   if (params.commissionPaid && params.commissionPaid !== "all") {
     search.set("commissionPaid", params.commissionPaid);
   }
+  if (params.employeeFullName) search.set("commissionEmployee", params.employeeFullName);
+  if (params.storeName) search.set("commissionStore", params.storeName);
   return search.toString();
+}
+
+function buildCommissionsExportUrl(params: {
+  scope: "filtered" | "all";
+  from?: string;
+  to?: string;
+  commissionPaid?: CommissionPaidFilter;
+  employeeFullName?: string;
+  storeName?: string;
+}) {
+  const search = new URLSearchParams();
+  search.set("scope", params.scope);
+  if (params.scope === "filtered") {
+    if (params.from) search.set("from", params.from);
+    if (params.to) search.set("to", params.to);
+    if (params.commissionPaid && params.commissionPaid !== "all") {
+      search.set("commissionPaid", params.commissionPaid);
+    }
+    if (params.employeeFullName) search.set("employee", params.employeeFullName);
+    if (params.storeName) search.set("store", params.storeName);
+  }
+  return `/admin/commissions/export?${search.toString()}`;
 }
 
 type CommissionsDashboardProps = {
   commissionsData: CommissionsData | null;
+  employees: { id: string; full_name: string }[];
+  stores: { id: string; name: string }[];
   /** Basculer payé / non payé : super_admin uniquement. */
   canManageCommissionPaid?: boolean;
 };
 
 export function CommissionsDashboard({
   commissionsData,
+  employees,
+  stores,
   canManageCommissionPaid = false,
 }: CommissionsDashboardProps) {
   const router = useRouter();
   const { t, locale } = useI18n();
+  const [isPending, startTransition] = useTransition();
 
   if (!commissionsData) {
     return (
@@ -139,20 +172,42 @@ export function CommissionsDashboard({
     submissions,
     total,
     unpaidTotal,
+    unpaidEmployeeTotal,
+    unpaidManagerTotal,
+    unpaidOwnerTotal,
     page,
     pageSize,
     fromDate,
     toDate,
     commissionPaid,
+    employeeFullName,
+    storeName,
   } = commissionsData;
+  const [commissionType, setCommissionType] = useState<CommissionTypeFilter>("all");
+  const employeeFilter = employeeFullName || "all";
+  const storeFilter = storeName || "all";
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
-  const COMMISSION_PER_DEVICE = 20;
-  const commissionAmountForPeriod = unpaidTotal * COMMISSION_PER_DEVICE;
+  const commissionAmountForPeriod =
+    commissionType === "employee"
+      ? unpaidEmployeeTotal
+      : commissionType === "manager"
+        ? unpaidManagerTotal
+        : commissionType === "owner"
+          ? unpaidOwnerTotal
+          : unpaidTotal;
   const paidOnPage = submissions.filter((s) => s.commission_paid).length;
   const unpaidOnPage = submissions.length - paidOnPage;
-  const totalValueOnPage = submissions.reduce(
-    (sum, s) => sum + submissionLineTotal(s.price, s.quantity),
+  const employeeOnPage = submissions.reduce(
+    (sum, s) => sum + Number(s.commission_employee ?? 0),
+    0,
+  );
+  const managerOnPage = submissions.reduce(
+    (sum, s) => sum + Number(s.commission_manager ?? 0),
+    0,
+  );
+  const ownerOnPage = submissions.reduce(
+    (sum, s) => sum + Number(s.commission_owner ?? 0),
     0,
   );
 
@@ -162,8 +217,12 @@ export function CommissionsDashboard({
         page: 1,
         pageSize,
         commissionPaid,
+        employeeFullName: employeeFilter === "all" ? undefined : employeeFilter,
+        storeName: storeFilter === "all" ? undefined : storeFilter,
       });
-      router.push(`/admin?${q}`);
+      startTransition(() => {
+        router.push(`/admin?${q}`);
+      });
       return;
     }
     if (preset === "custom") return;
@@ -215,8 +274,12 @@ export function CommissionsDashboard({
       from: toDateInputValue(from),
       to: toDateInputValue(to),
       commissionPaid,
+      employeeFullName: employeeFilter === "all" ? undefined : employeeFilter,
+      storeName: storeFilter === "all" ? undefined : storeFilter,
     });
-    router.push(`/admin?${q}`);
+    startTransition(() => {
+      router.push(`/admin?${q}`);
+    });
   };
 
   const currentPeriodPreset = (): PeriodPreset => {
@@ -231,8 +294,12 @@ export function CommissionsDashboard({
       from: fromDate || undefined,
       to: toDate || undefined,
       commissionPaid: value,
+      employeeFullName: employeeFilter === "all" ? undefined : employeeFilter,
+      storeName: storeFilter === "all" ? undefined : storeFilter,
     });
-    router.push(`/admin?${q}`);
+    startTransition(() => {
+      router.push(`/admin?${q}`);
+    });
   };
 
   const handleFromDateChange = (value: string) => {
@@ -242,8 +309,12 @@ export function CommissionsDashboard({
       from: value || undefined,
       to: toDate || undefined,
       commissionPaid,
+      employeeFullName: employeeFilter === "all" ? undefined : employeeFilter,
+      storeName: storeFilter === "all" ? undefined : storeFilter,
     });
-    router.push(`/admin?${q}`);
+    startTransition(() => {
+      router.push(`/admin?${q}`);
+    });
   };
 
   const handleToDateChange = (value: string) => {
@@ -253,8 +324,42 @@ export function CommissionsDashboard({
       from: fromDate || undefined,
       to: value || undefined,
       commissionPaid,
+      employeeFullName: employeeFilter === "all" ? undefined : employeeFilter,
+      storeName: storeFilter === "all" ? undefined : storeFilter,
     });
-    router.push(`/admin?${q}`);
+    startTransition(() => {
+      router.push(`/admin?${q}`);
+    });
+  };
+
+  const handleEmployeeFilterChange = (value: string) => {
+    const q = buildCommissionsQuery({
+      page: 1,
+      pageSize,
+      from: fromDate || undefined,
+      to: toDate || undefined,
+      commissionPaid,
+      employeeFullName: value === "all" ? undefined : value,
+      storeName: storeFilter === "all" ? undefined : storeFilter,
+    });
+    startTransition(() => {
+      router.push(`/admin?${q}`);
+    });
+  };
+
+  const handleStoreFilterChange = (value: string) => {
+    const q = buildCommissionsQuery({
+      page: 1,
+      pageSize,
+      from: fromDate || undefined,
+      to: toDate || undefined,
+      commissionPaid,
+      employeeFullName: employeeFilter === "all" ? undefined : employeeFilter,
+      storeName: value === "all" ? undefined : value,
+    });
+    startTransition(() => {
+      router.push(`/admin?${q}`);
+    });
   };
 
   const handleTogglePaid = async (submissionId: string, current: boolean) => {
@@ -274,45 +379,47 @@ export function CommissionsDashboard({
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center gap-3 rounded-card border border-foreground/10 bg-background p-3 shadow-soft sm:gap-4 sm:p-4">
-        <div className="flex w-full items-center gap-2 sm:w-auto">
-          <Filter className="h-4 w-4 shrink-0 text-foreground/60" />
-          <span className="text-sm font-medium text-foreground/70">{t.admin.period}</span>
+      {isPending ? (
+        <div className="rounded-card border border-brand-primary/25 bg-brand-primary/8 px-4 py-2 text-xs font-medium text-brand-primary">
+          {t.admin.loadingCommissions}
         </div>
-        <select
-          value={currentPeriodPreset()}
-          onChange={(e) => handlePeriodPreset(e.target.value as PeriodPreset)}
-          className="rounded-card border-2 border-transparent bg-[#F5F5F4] px-4 py-3 text-sm text-foreground transition-all focus:border-brand-primary focus:bg-background focus:outline-none"
-        >
-          <option value="all">{t.admin.allPeriods}</option>
-          <option value="this_week">{t.admin.thisWeek}</option>
-          <option value="last_week">{t.admin.lastWeek}</option>
-          <option value="this_month">{t.admin.thisMonth}</option>
-          <option value="last_month">{t.admin.lastMonth}</option>
-          <option value="3_months">{t.admin.threeMonths}</option>
-          <option value="6_months">{t.admin.sixMonths}</option>
-          <option value="this_year">{t.admin.thisYear}</option>
-          <option value="custom">{t.admin.custom}</option>
-        </select>
-        <input
-          type="date"
-          value={fromDate}
-          onChange={(e) => handleFromDateChange(e.target.value)}
-          className="rounded-card border-2 border-transparent bg-[#F5F5F4] px-4 py-3 text-sm text-foreground transition-all focus:border-brand-primary focus:bg-background focus:outline-none"
-          aria-label={t.admin.startDate}
-        />
-        <input
-          type="date"
-          value={toDate}
-          onChange={(e) => handleToDateChange(e.target.value)}
-          className="rounded-card border-2 border-transparent bg-[#F5F5F4] px-4 py-3 text-sm text-foreground transition-all focus:border-brand-primary focus:bg-background focus:outline-none"
-          aria-label={t.admin.endDate}
-        />
-        <div className="ml-2 flex w-full flex-wrap items-center gap-2 border-0 border-t border-foreground/20 pt-3 sm:w-auto sm:border-l sm:pt-0 sm:pl-4">
-          <span className="text-sm font-medium text-foreground/70">{t.admin.commissionLabel}</span>
+      ) : null}
+      <section className="space-y-3 rounded-card border border-foreground/10 bg-background p-4 shadow-soft">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h3 className="text-sm font-semibold uppercase tracking-[0.08em] text-foreground/70">
+            Filtres
+          </h3>
+          <div className="flex flex-wrap items-center gap-2">
+            <a
+              href={buildCommissionsExportUrl({
+                scope: "filtered",
+                from: fromDate || undefined,
+                to: toDate || undefined,
+                commissionPaid,
+                employeeFullName: employeeFilter === "all" ? undefined : employeeFilter,
+                storeName: storeFilter === "all" ? undefined : storeFilter,
+              })}
+              className="rounded-card border border-foreground/20 px-3 py-1.5 text-xs text-foreground/80 transition-colors hover:bg-foreground/5"
+            >
+              {t.admin.exportFilteredCsvLabel}
+            </a>
+            <a
+              href={buildCommissionsExportUrl({ scope: "all" })}
+              className="rounded-card border border-foreground/20 px-3 py-1.5 text-xs text-foreground/80 transition-colors hover:bg-foreground/5"
+            >
+              {t.admin.exportAllCsvLabel}
+            </a>
+          </div>
+        </div>
+        <div className="flex flex-wrap items-center gap-3 sm:gap-4">
+          <div className="flex items-center gap-2">
+            <Filter className="h-4 w-4 shrink-0 text-foreground/60" />
+            <span className="text-sm font-medium text-foreground/70">{t.admin.commissionLabel}</span>
+          </div>
           <select
             value={commissionPaid}
             onChange={(e) => handleCommissionPaidChange(e.target.value as CommissionPaidFilter)}
+            disabled={isPending}
             className="rounded-card border-2 border-transparent bg-[#F5F5F4] px-4 py-3 text-sm text-foreground transition-all focus:border-brand-primary focus:bg-background focus:outline-none"
             aria-label={t.admin.filterByPaymentStatus}
           >
@@ -320,10 +427,91 @@ export function CommissionsDashboard({
             <option value="paid">{t.admin.paid}</option>
             <option value="unpaid">{t.admin.unpaid}</option>
           </select>
+          <span className="text-sm font-medium text-foreground/70">
+            {t.admin.employeeFullName}
+          </span>
+          <select
+            value={employeeFilter}
+            onChange={(e) => handleEmployeeFilterChange(e.target.value)}
+            disabled={isPending}
+            className="rounded-card border-2 border-transparent bg-[#F5F5F4] px-4 py-3 text-sm text-foreground transition-all focus:border-brand-primary focus:bg-background focus:outline-none"
+          >
+            <option value="all">{t.admin.all}</option>
+            {employees.map((employee) => (
+              <option key={employee.id} value={employee.full_name}>
+                {employee.full_name}
+              </option>
+            ))}
+          </select>
+          <span className="text-sm font-medium text-foreground/70">{t.admin.storeNameLabel}</span>
+          <select
+            value={storeFilter}
+            onChange={(e) => handleStoreFilterChange(e.target.value)}
+            disabled={isPending}
+            className="rounded-card border-2 border-transparent bg-[#F5F5F4] px-4 py-3 text-sm text-foreground transition-all focus:border-brand-primary focus:bg-background focus:outline-none"
+          >
+            <option value="all">{t.admin.all}</option>
+            {stores.map((store) => (
+              <option key={store.id} value={store.name}>
+                {store.name}
+              </option>
+            ))}
+          </select>
         </div>
-      </div>
+        <div className="flex flex-wrap items-center gap-3 border-t border-foreground/15 pt-3 sm:gap-4">
+          <span className="text-sm font-medium text-foreground/70">{t.admin.period}</span>
+          <select
+            value={currentPeriodPreset()}
+            onChange={(e) => handlePeriodPreset(e.target.value as PeriodPreset)}
+            disabled={isPending}
+            className="rounded-card border-2 border-transparent bg-[#F5F5F4] px-4 py-3 text-sm text-foreground transition-all focus:border-brand-primary focus:bg-background focus:outline-none"
+          >
+            <option value="all">{t.admin.allPeriods}</option>
+            <option value="this_week">{t.admin.thisWeek}</option>
+            <option value="last_week">{t.admin.lastWeek}</option>
+            <option value="this_month">{t.admin.thisMonth}</option>
+            <option value="last_month">{t.admin.lastMonth}</option>
+            <option value="3_months">{t.admin.threeMonths}</option>
+            <option value="6_months">{t.admin.sixMonths}</option>
+            <option value="this_year">{t.admin.thisYear}</option>
+            <option value="custom">{t.admin.custom}</option>
+          </select>
+          <input
+            type="date"
+            value={fromDate}
+            onChange={(e) => handleFromDateChange(e.target.value)}
+            disabled={isPending}
+            className="rounded-card border-2 border-transparent bg-[#F5F5F4] px-4 py-3 text-sm text-foreground transition-all focus:border-brand-primary focus:bg-background focus:outline-none"
+            aria-label={t.admin.startDate}
+          />
+          <input
+            type="date"
+            value={toDate}
+            onChange={(e) => handleToDateChange(e.target.value)}
+            disabled={isPending}
+            className="rounded-card border-2 border-transparent bg-[#F5F5F4] px-4 py-3 text-sm text-foreground transition-all focus:border-brand-primary focus:bg-background focus:outline-none"
+            aria-label={t.admin.endDate}
+          />
+          <span className="text-sm font-medium text-foreground/70">{t.admin.commissionTypeLabel}</span>
+          <select
+            value={commissionType}
+            onChange={(e) => setCommissionType(e.target.value as CommissionTypeFilter)}
+            disabled={isPending}
+            className="rounded-card border-2 border-transparent bg-[#F5F5F4] px-4 py-3 text-sm text-foreground transition-all focus:border-brand-primary focus:bg-background focus:outline-none"
+          >
+            <option value="all">{t.admin.allCommissionsLabel}</option>
+            <option value="employee">{t.admin.employeeCommission}</option>
+            <option value="manager">{t.admin.managerCommission}</option>
+            <option value="owner">{t.admin.ownerCommission}</option>
+          </select>
+        </div>
+      </section>
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+      <section className="space-y-3 rounded-card border border-foreground/10 bg-background p-4 shadow-soft">
+        <h3 className="text-sm font-semibold uppercase tracking-[0.08em] text-foreground/70">
+          Stats
+        </h3>
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-6">
         <div className="rounded-card border border-foreground/10 bg-background p-4 shadow-soft">
           <div className="flex items-center gap-2 text-foreground/60">
             <Smartphone className="h-5 w-5" />
@@ -341,17 +529,32 @@ export function CommissionsDashboard({
           <p className="mt-2 font-(family-name:--font-playfair) text-3xl font-light text-brand-dark">
             {commissionAmountForPeriod.toFixed(2)} $
           </p>
-          <p className="mt-1 text-xs text-foreground/50">
-            {COMMISSION_PER_DEVICE}$ × {unpaidTotal} {t.admin.unpaidCommissionUnits}
+        </div>
+        <div className="rounded-card border border-foreground/10 bg-background p-4 shadow-soft">
+          <div className="flex items-center gap-2 text-foreground/60">
+            <Coins className="h-5 w-5" />
+            <span className="text-sm font-medium">{t.admin.employeeCommission}</span>
+          </div>
+          <p className="mt-2 font-(family-name:--font-playfair) text-3xl font-light text-brand-dark">
+            {employeeOnPage.toFixed(2)} $
           </p>
         </div>
         <div className="rounded-card border border-foreground/10 bg-background p-4 shadow-soft">
           <div className="flex items-center gap-2 text-foreground/60">
-            <DollarSign className="h-5 w-5" />
-            <span className="text-sm font-medium">{t.admin.valueCurrentPage}</span>
+            <Coins className="h-5 w-5" />
+            <span className="text-sm font-medium">{t.admin.managerCommission}</span>
           </div>
-          <p className="mt-2 font-(family-name:--font-playfair) text-3xl font-light text-brand-primary">
-            {totalValueOnPage.toFixed(2)} $
+          <p className="mt-2 font-(family-name:--font-playfair) text-3xl font-light text-brand-dark">
+            {managerOnPage.toFixed(2)} $
+          </p>
+        </div>
+        <div className="rounded-card border border-foreground/10 bg-background p-4 shadow-soft">
+          <div className="flex items-center gap-2 text-foreground/60">
+            <Coins className="h-5 w-5" />
+            <span className="text-sm font-medium">{t.admin.ownerCommission}</span>
+          </div>
+          <p className="mt-2 font-(family-name:--font-playfair) text-3xl font-light text-brand-dark">
+            {ownerOnPage.toFixed(2)} $
           </p>
         </div>
         <div className="rounded-card border border-foreground/10 bg-background p-4 shadow-soft">
@@ -372,9 +575,14 @@ export function CommissionsDashboard({
             {unpaidOnPage}
           </p>
         </div>
-      </div>
+        </div>
+      </section>
 
-      <div className="rounded-card border border-foreground/10 bg-background shadow-soft overflow-x-auto">
+      <section className="space-y-3">
+        <h3 className="text-sm font-semibold uppercase tracking-[0.08em] text-foreground/70">
+          Liste des cells rachetés
+        </h3>
+        <div className="rounded-card border border-foreground/10 bg-background shadow-soft overflow-x-auto">
         <Table className="min-w-[600px]">
           <TableHeader>
             <TableRow>
@@ -383,13 +591,16 @@ export function CommissionsDashboard({
               <TableHead className="px-3 sm:px-6">{t.admin.device}</TableHead>
               <TableHead className="text-center px-3 sm:px-6">{t.admin.quantity}</TableHead>
               <TableHead className="px-3 sm:px-6">{t.admin.price}</TableHead>
+              <TableHead className="px-3 sm:px-6">{t.admin.employeeCommission}</TableHead>
+              <TableHead className="px-3 sm:px-6">{t.admin.managerCommission}</TableHead>
+              <TableHead className="px-3 sm:px-6">{t.admin.ownerCommission}</TableHead>
               <TableHead className="text-center px-3 sm:px-6">{t.admin.commissionPaid}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {submissions.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} className="px-3 py-8 text-center text-foreground/60 sm:px-6">
+                <TableCell colSpan={9} className="px-3 py-8 text-center text-foreground/60 sm:px-6">
                   {t.admin.noDevicesForPeriod}
                 </TableCell>
               </TableRow>
@@ -419,6 +630,15 @@ export function CommissionsDashboard({
                         submission.quantity,
                       ).toFixed(2)}{" "}
                       $
+                    </TableCell>
+                    <TableCell className="px-3 py-3 font-medium text-foreground sm:px-6 sm:py-4">
+                      {Number(submission.commission_employee ?? 0).toFixed(2)} $
+                    </TableCell>
+                    <TableCell className="px-3 py-3 font-medium text-foreground sm:px-6 sm:py-4">
+                      {Number(submission.commission_manager ?? 0).toFixed(2)} $
+                    </TableCell>
+                    <TableCell className="px-3 py-3 font-medium text-foreground sm:px-6 sm:py-4">
+                      {Number(submission.commission_owner ?? 0).toFixed(2)} $
                     </TableCell>
                     <TableCell className="text-center px-3 py-3 sm:px-6 sm:py-4">
                       {canManageCommissionPaid ? (
@@ -498,6 +718,8 @@ export function CommissionsDashboard({
                   from: fromDate || undefined,
                   to: toDate || undefined,
                   commissionPaid,
+                  employeeFullName: employeeFilter === "all" ? undefined : employeeFilter,
+                  storeName: storeFilter === "all" ? undefined : storeFilter,
                 })}`}
                 className={`inline-flex items-center gap-1 rounded-card border-2 px-3 py-2 text-sm font-medium transition-all ${
                   page <= 1
@@ -519,6 +741,8 @@ export function CommissionsDashboard({
                   from: fromDate || undefined,
                   to: toDate || undefined,
                   commissionPaid,
+                  employeeFullName: employeeFilter === "all" ? undefined : employeeFilter,
+                  storeName: storeFilter === "all" ? undefined : storeFilter,
                 })}`}
                 className={`inline-flex items-center gap-1 rounded-card border-2 px-3 py-2 text-sm font-medium transition-all ${
                   page >= totalPages
@@ -533,7 +757,8 @@ export function CommissionsDashboard({
             </div>
           </div>
         )}
-      </div>
+        </div>
+      </section>
     </div>
   );
 }

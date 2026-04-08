@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useI18n } from "@/contexts/I18nContext";
-import { LanguageSwitcher } from "../../components/LanguageSwitcher";
 import { LogoutButton } from "../../components/LogoutButton";
 import { AdminSidebar } from "./AdminSidebar";
 import { AdminUsersTable } from "./AdminUsersTable";
@@ -12,6 +11,8 @@ import { OrdersTable, type OrderSummary } from "./OrdersTable";
 import { OrderDetail } from "./OrderDetail";
 import { ProductsManager } from "./ProductsManager";
 import { CommissionsDashboard } from "./CommissionsDashboard";
+import { CommissionRulesManager } from "./CommissionRulesManager";
+import { StaffReferenceManager } from "./StaffReferenceManager";
 import {
   ArrowLeft,
   Menu,
@@ -20,11 +21,17 @@ import {
   ShoppingBag,
   Package,
   DollarSign,
+  Building2,
 } from "lucide-react";
 import type { SubmissionStatus } from "@/lib/submissions";
 import type { AppRole } from "@/lib/app-role";
 
-type AdminSection = "comptes" | "demandes" | "produits" | "commissions";
+type AdminSection =
+  | "comptes"
+  | "referentiel"
+  | "demandes"
+  | "produits"
+  | "commissions";
 
 type AdminUser = {
   id: string;
@@ -40,7 +47,9 @@ type Submission = {
   request_group_id: string | null;
   created_at: string;
   employee_full_name: string;
+  store_name: string;
   client_full_name: string;
+  client_account_number: string;
   client_city: string;
   device_imei: string;
   customer_name: string;
@@ -65,6 +74,9 @@ type Submission = {
   shipping_label_error?: string | null;
   status: SubmissionStatus;
   commission_paid: boolean;
+  commission_employee?: number | null;
+  commission_manager?: number | null;
+  commission_owner?: number | null;
 };
 
 type Brand = {
@@ -102,16 +114,31 @@ export type CommissionsData = {
   submissions: Submission[];
   total: number;
   unpaidTotal: number;
+  unpaidEmployeeTotal: number;
+  unpaidManagerTotal: number;
+  unpaidOwnerTotal: number;
+  globalYearUnitsTotal: number;
+  globalYearBuybackTotal: number;
+  globalYearEmployeeCommissionTotal: number;
+  globalYearManagerCommissionTotal: number;
+  globalYearOwnerCommissionTotal: number;
+  globalYearCommissionTotal: number;
   page: number;
   pageSize: number;
   fromDate: string;
   toDate: string;
   commissionPaid: "all" | "paid" | "unpaid";
+  employeeFullName: string;
+  storeName: string;
 };
 
 type AdminLayoutProps = {
   submissions: Submission[];
   orders: OrderSummary[];
+  ordersPage: number;
+  ordersPageSize: number;
+  totalOrders: number;
+  totalOrdersPages: number;
   selectedOrder?: string | null;
   orderSubmissions?: Submission[];
   adminUsers: AdminUser[];
@@ -121,6 +148,8 @@ type AdminLayoutProps = {
   initialSection?: AdminSection;
   initialProductsTab?: "brands" | "models" | "prices";
   commissionsData?: CommissionsData | null;
+  employees: { id: string; full_name: string }[];
+  stores: { id: string; name: string }[];
   /** Section Comptes (création d’utilisateurs) : super_admin uniquement. */
   canManageStaffAccounts?: boolean;
   viewerRole?: AppRole;
@@ -129,6 +158,10 @@ type AdminLayoutProps = {
 export function AdminLayout({
   submissions,
   orders,
+  ordersPage,
+  ordersPageSize,
+  totalOrders,
+  totalOrdersPages,
   selectedOrder = null,
   orderSubmissions = [],
   adminUsers,
@@ -138,6 +171,8 @@ export function AdminLayout({
   initialSection = "demandes",
   initialProductsTab = "brands",
   commissionsData = null,
+  employees,
+  stores,
   canManageStaffAccounts = false,
   viewerRole = "admin",
 }: AdminLayoutProps) {
@@ -154,16 +189,17 @@ export function AdminLayout({
           ? "Staff"
           : "Employé";
 
-  const compactLang =
-    "h-9 gap-1.5 border-foreground/15 px-3 py-0 text-[11px] tracking-[0.12em] sm:h-10 sm:px-3.5";
   const compactLogout =
     "h-9 border-brand-dark/35 px-4 py-0 text-[11px] tracking-[0.12em] sm:h-10 sm:px-5 sm:text-xs";
+  const canManageProducts = viewerRole === "super_admin";
   const sectionFromServer = useMemo<AdminSection>(
     () =>
       !canManageStaffAccounts && initialSection === "comptes"
         ? "demandes"
-        : initialSection,
-    [canManageStaffAccounts, initialSection],
+        : !canManageProducts && initialSection === "produits"
+          ? "demandes"
+          : initialSection,
+    [canManageProducts, canManageStaffAccounts, initialSection],
   );
   const [activeSection, setActiveSection] =
     useState<AdminSection>(sectionFromServer);
@@ -178,9 +214,12 @@ export function AdminLayout({
       ...(canManageStaffAccounts
         ? [{ id: "comptes" as const, label: t.admin.accounts, icon: Users }]
         : []),
+      { id: "referentiel", label: t.admin.reference, icon: Building2 },
       { id: "demandes", label: t.admin.tradeInRequests, icon: ShoppingBag },
       { id: "commissions", label: t.admin.commissions, icon: DollarSign },
-      { id: "produits", label: t.admin.products, icon: Package },
+      ...(canManageProducts
+        ? [{ id: "produits" as const, label: t.admin.products, icon: Package }]
+        : []),
     ];
 
   const updateUrl = (section: AdminSection) => {
@@ -218,6 +257,9 @@ export function AdminLayout({
     if (section === "comptes" && !canManageStaffAccounts) {
       return;
     }
+    if (section === "produits" && !canManageProducts) {
+      return;
+    }
     setActiveSection(section);
     updateUrl(section);
   };
@@ -239,11 +281,9 @@ export function AdminLayout({
             </Link>
           </div>
           <div className="hidden shrink-0 items-center gap-2 sm:gap-3 md:flex">
-            <LanguageSwitcher triggerClassName={compactLang} />
             <LogoutButton className={compactLogout} />
           </div>
           <div className="flex shrink-0 items-center gap-2 md:hidden">
-            <LanguageSwitcher triggerClassName={compactLang} />
             <button
               type="button"
               onClick={() => setHeaderMenuOpen((o) => !o)}
@@ -301,14 +341,15 @@ export function AdminLayout({
         </div>
       </header>
 
-      <div className="flex">
+      <div className="flex min-w-0">
         <AdminSidebar
           activeSection={activeSection}
           onSectionChange={handleSectionChange}
           showAccountsSection={canManageStaffAccounts}
+          showProductsSection={canManageProducts}
         />
 
-        <main className="flex-1 px-4 py-8 sm:px-6 sm:py-10 lg:px-6 lg:py-12 lg:pl-8">
+        <main className="min-w-0 flex-1 px-4 py-8 sm:px-6 sm:py-10 lg:px-6 lg:py-12 lg:pl-8">
           {canManageStaffAccounts && activeSection === "comptes" && (
             <div>
               <div className="mb-6 sm:mb-8">
@@ -330,8 +371,20 @@ export function AdminLayout({
             </div>
           )}
 
-          {activeSection === "demandes" && (
+          {activeSection === "referentiel" && (
             <div>
+              <div className="mb-6 sm:mb-8">
+                <h1 className="mb-2 font-(family-name:--font-playfair) text-2xl font-light text-brand-dark sm:text-3xl md:text-4xl lg:text-5xl">
+                  {t.admin.referenceTitle}
+                </h1>
+                <p className="text-foreground/60">{t.admin.referenceSubtitle}</p>
+              </div>
+              <StaffReferenceManager employees={employees} stores={stores} />
+            </div>
+          )}
+
+          {activeSection === "demandes" && (
+            <div className="min-w-0 w-full">
               <div className="mb-6 sm:mb-8">
                 <h1 className="mb-2 font-(family-name:--font-playfair) text-2xl font-light text-brand-dark sm:text-3xl md:text-4xl lg:text-5xl">
                   {t.admin.tradeInRequestsTitle}
@@ -350,29 +403,89 @@ export function AdminLayout({
                   canManageCommissionPaid={viewerRole === "super_admin"}
                 />
               ) : (
-                <OrdersTable orders={orders} />
+                <OrdersTable
+                  orders={orders}
+                  page={ordersPage}
+                  pageSize={ordersPageSize}
+                  total={totalOrders}
+                  totalPages={totalOrdersPages}
+                />
               )}
             </div>
           )}
 
           {activeSection === "commissions" && (
             <div>
-              <div className="mb-6 sm:mb-8">
-                <h1 className="mb-2 font-(family-name:--font-playfair) text-2xl font-light text-brand-dark sm:text-3xl md:text-4xl lg:text-5xl">
-                  {t.admin.commissionsTitle}
-                </h1>
-                <p className="text-foreground/60">
-                  {t.admin.commissionsSubtitle}
-                </p>
+              <div className="mb-6 flex flex-col gap-4 sm:mb-8 lg:flex-row lg:items-start lg:justify-between">
+                <div>
+                  <h1 className="mb-2 font-(family-name:--font-playfair) text-2xl font-light text-brand-dark sm:text-3xl md:text-4xl lg:text-5xl">
+                    {t.admin.commissionsTitle}
+                  </h1>
+                  <p className="text-foreground/60">
+                    {t.admin.commissionsSubtitle}
+                  </p>
+                </div>
+                {commissionsData ? (
+                  <section className="w-full max-w-[520px] rounded-card border border-foreground/10 bg-background p-4 shadow-soft">
+                    <h3 className="mb-3 text-xs font-semibold uppercase tracking-[0.08em] text-foreground/70">
+                      {t.admin.globalYearStatsTitle}
+                    </h3>
+                    <div className="space-y-2 text-sm">
+                      <div className="flex items-center justify-between">
+                        <span className="text-foreground/60">{t.admin.totalDevicesSoldLabel}</span>
+                        <span className="font-semibold text-brand-dark">
+                          {commissionsData.globalYearUnitsTotal}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-foreground/60">{t.admin.totalBuybackAmountLabel}</span>
+                        <span className="font-semibold text-brand-dark">
+                          {commissionsData.globalYearBuybackTotal.toFixed(2)} $
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-foreground/60">{t.admin.totalEmployeeCommissionLabel}</span>
+                        <span className="font-semibold text-brand-dark">
+                          {commissionsData.globalYearEmployeeCommissionTotal.toFixed(2)} $
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-foreground/60">{t.admin.totalManagerCommissionLabel}</span>
+                        <span className="font-semibold text-brand-dark">
+                          {commissionsData.globalYearManagerCommissionTotal.toFixed(2)} $
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-foreground/60">{t.admin.totalOwnerCommissionLabel}</span>
+                        <span className="font-semibold text-brand-dark">
+                          {commissionsData.globalYearOwnerCommissionTotal.toFixed(2)} $
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between border-t border-foreground/10 pt-2">
+                        <span className="text-foreground/70">{t.admin.totalCommissionGlobalLabel}</span>
+                        <span className="font-semibold text-brand-primary">
+                          {commissionsData.globalYearCommissionTotal.toFixed(2)} $
+                        </span>
+                      </div>
+                    </div>
+                  </section>
+                ) : null}
               </div>
               <CommissionsDashboard
                 commissionsData={commissionsData}
                 canManageCommissionPaid={viewerRole === "super_admin"}
+                employees={employees}
+                stores={stores}
               />
+              {viewerRole === "super_admin" ? (
+                <div className="mt-5">
+                  <CommissionRulesManager />
+                </div>
+              ) : null}
             </div>
           )}
 
-          {activeSection === "produits" && (
+          {canManageProducts && activeSection === "produits" && (
             <div>
               <div className="mb-6 sm:mb-8">
                 <h1 className="mb-2 font-(family-name:--font-playfair) text-2xl font-light text-brand-dark sm:text-3xl md:text-4xl lg:text-5xl">

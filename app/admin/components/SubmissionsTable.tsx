@@ -23,7 +23,9 @@ type Submission = {
   id: string;
   created_at: string;
   employee_full_name: string;
+  store_name?: string;
   client_full_name: string;
+  client_account_number?: string;
   client_city: string;
   device_imei: string;
   customer_name: string;
@@ -200,6 +202,17 @@ export function SubmissionsTable({ submissions: initialSubmissions }: Submission
                     {submission.employee_full_name ? (
                       <span className="text-sm text-foreground/60">
                         Employé : {submission.employee_full_name}
+                      </span>
+                    ) : null}
+                    {submission.store_name ? (
+                      <span className="text-sm text-foreground/60">
+                        Magasin : {submission.store_name}
+                      </span>
+                    ) : null}
+                    {submission.client_account_number ? (
+                      <span className="text-sm text-foreground/60">
+                        Compte :{" "}
+                        <span className="font-mono">{submission.client_account_number}</span>
                       </span>
                     ) : null}
                     <span className="text-sm text-foreground/60">

@@ -1,4 +1,4 @@
-# Inventory cellphone (AcheteTonCell)
+# Inventory cellphone
 
 Application Next.js + Supabase (rachat, admin, auth par rôles).
 

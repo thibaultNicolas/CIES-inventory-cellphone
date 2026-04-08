@@ -55,3 +55,19 @@ body {
   0% { transform: translateX(0); }
   100% { transform: translateX(-50%); }
 }
+
+@media print {
+  @page {
+    margin: 6mm 10mm 8mm 10mm;
+  }
+
+  body {
+    background: #fff !important;
+  }
+
+  /* Bon rachat : compacter légèrement pour viser une seule page */
+  #rachat-confirmation-print {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}

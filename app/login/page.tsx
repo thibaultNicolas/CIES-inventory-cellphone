@@ -35,11 +35,7 @@ function LoginPageInner() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-6">
       <div className="w-full max-w-md">
-        <div className="mb-12 text-center">
-          <p className="font-(family-name:--font-playfair) text-3xl font-semibold tracking-tight text-brand-dark">
-            AcheteTonCell
-          </p>
-        </div>
+        <div className="mb-12 text-center" />
 
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -120,11 +116,6 @@ function LoginPageInner() {
             </button>
           </form>
         </motion.div>
-
-        <p className="mt-8 text-center text-xs text-foreground/40">
-          Authentification sécurisée via Supabase. Rôles : employé, admin, super
-          admin.
-        </p>
       </div>
     </div>
   );

@@ -27,7 +27,9 @@ type Submission = {
   request_group_id: string | null;
   created_at: string;
   employee_full_name: string;
+  store_name: string;
   client_full_name: string;
+  client_account_number: string;
   client_city: string;
   device_imei: string;
   customer_name: string;
@@ -480,11 +482,24 @@ export function SubmissionsTableWithFilters({
                         <div className="font-medium text-foreground">
                           {submission.client_full_name || submission.customer_name}
                         </div>
-                        <div className="text-xs text-foreground/60">
-                          {submission.employee_full_name
-                            ? `${t.admin.employeeFullName}: ${submission.employee_full_name}`
-                            : null}
-                        </div>
+                        {submission.employee_full_name ? (
+                          <div className="text-xs text-foreground/60">
+                            {t.admin.employeeFullName}: {submission.employee_full_name}
+                          </div>
+                        ) : null}
+                        {submission.store_name ? (
+                          <div className="text-xs text-foreground/60">
+                            {t.admin.storeNameLabel}: {submission.store_name}
+                          </div>
+                        ) : null}
+                        {submission.client_account_number ? (
+                          <div className="text-xs text-foreground/60">
+                            {t.admin.clientAccountNumberLabel}:{" "}
+                            <span className="font-mono">
+                              {submission.client_account_number}
+                            </span>
+                          </div>
+                        ) : null}
                         <div className="text-xs text-foreground/60">
                           {t.admin.clientPhoneLabel}: {submission.customer_phone}
                           {submission.client_city ? ` · ${submission.client_city}` : ""}

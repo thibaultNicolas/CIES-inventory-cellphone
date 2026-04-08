@@ -1,4 +1,4 @@
-import { createCachedClient } from "@/lib/supabase-server";
+import { createAdminClient, createCachedClient } from "@/lib/supabase-server";
 import { sortModelsByRecent } from "@/lib/model-sort";
 import { RachatWizard } from "./rachat-wizard";
 import type { Locale } from "@/lib/i18n";
@@ -18,6 +18,16 @@ type Model = {
   image_url: string | null;
   min_price: number;
   max_price: number;
+};
+
+type EmployeeRef = {
+  id: string;
+  full_name: string;
+};
+
+type StoreRef = {
+  id: string;
+  name: string;
 };
 
 const DEFAULT_BRAND_ORDER = [
@@ -140,21 +150,50 @@ async function getModelsWithMinPrice(): Promise<Model[]> {
   return sortedModels;
 }
 
+async function getEmployees(): Promise<EmployeeRef[]> {
+  const supabase = createAdminClient();
+  const { data, error } = await supabase
+    .from("employees")
+    .select("id, full_name")
+    .eq("is_active", true)
+    .order("full_name", { ascending: true });
+  if (error) return [];
+  return data || [];
+}
+
+async function getStores(): Promise<StoreRef[]> {
+  const supabase = createAdminClient();
+  const { data, error } = await supabase
+    .from("stores")
+    .select("id, name")
+    .eq("is_active", true)
+    .order("name", { ascending: true });
+  if (error) return [];
+  return data || [];
+}
+
 export type RachatPageContentProps = {
   locale: Locale;
 };
 
 export async function RachatPageContent({ locale }: RachatPageContentProps) {
-  const [brands, models] = await Promise.all([
+  const [brands, models, employees, stores] = await Promise.all([
     getBrands(),
     getModelsWithMinPrice(),
+    getEmployees(),
+    getStores(),
   ]);
 
   return (
-    <div id="rachat-top" className="min-h-screen bg-background pt-6 md:pt-8">
+    <div id="rachat-top" className="min-h-screen bg-secondary pt-6 md:pt-8">
       <div id="faq" className="sr-only" aria-hidden="true" />
       <main>
-        <RachatWizard brands={brands} models={models} />
+        <RachatWizard
+          brands={brands}
+          models={models}
+          employees={employees}
+          stores={stores}
+        />
       </main>
       <a
         href="#rachat-top"

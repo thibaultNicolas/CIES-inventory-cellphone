@@ -28,11 +28,8 @@ export function MerciContent({
     <div className="min-h-screen bg-background pt-28 sm:pt-32">
       <header className="fixed left-0 right-0 top-14 z-50 bg-background/80 backdrop-blur-md">
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 py-4 sm:px-6 sm:py-5">
-          <Link
-            href={homePath}
-            className="shrink-0 font-(family-name:--font-playfair) text-lg font-semibold tracking-tight text-brand-dark transition-colors hover:text-brand-primary sm:text-xl"
-          >
-            AcheteTonCell
+          <Link href={homePath} className="sr-only">
+            Accueil
           </Link>
           <div className="flex items-center gap-4 sm:gap-8">
             <Link

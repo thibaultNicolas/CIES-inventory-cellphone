@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 
-const siteName = "AcheteTonCell";
+const siteName = "Rachat cellulaire";
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://achetetoncell.com";
 const shareImage = "/share.png";
 type SiteLocale = "fr" | "en";
@@ -31,7 +31,7 @@ function getAlternatesForPath(path: string) {
   };
 }
 
-const defaultTitle = "AcheteTonCell - Rachat cellulaire Québec | Vendre iPhone Montréal";
+const defaultTitle = "Rachat cellulaire Québec | Vendre iPhone Montréal";
 const defaultDescription =
   "Vendez votre cellulaire au meilleur prix au Québec. Rachat iPhone, Samsung et plus. Évaluation gratuite, expédition offerte, paiement rapide en 4 jours. Service de rachat cellulaire à Montréal et partout au Québec.";
 
@@ -83,7 +83,7 @@ export function getDefaultMetadata(): Metadata {
           url: shareImage,
           width: 1200,
           height: 630,
-          alt: "AcheteTonCell - Rachat cellulaire au Québec",
+          alt: "Rachat cellulaire au Québec",
         },
       ],
     },
@@ -95,11 +95,11 @@ export function getDefaultMetadata(): Metadata {
       creator: "@achetetoncell",
     },
     robots: {
-      index: true,
-      follow: true,
+      index: false,
+      follow: false,
       googleBot: {
-        index: true,
-        follow: true,
+        index: false,
+        follow: false,
         "max-video-preview": -1,
         "max-image-preview": "large",
         "max-snippet": -1,
@@ -132,7 +132,7 @@ export function getPageMetadata({
   image,
   url,
   locale = "fr",
-  noindex = false,
+  noindex = true,
 }: {
   title: string;
   description: string;
@@ -230,38 +230,6 @@ export function getRachatMetadata(locale: SiteLocale = "fr"): Metadata {
   });
 }
 
-export function getContactMetadata(locale: SiteLocale = "fr"): Metadata {
-  return getPageMetadata({
-    title: "Contact",
-    description:
-      "Contactez AcheteTonCell pour toute question sur le rachat de cellulaire au Québec.",
-    url: "/contact",
-    locale,
-  });
-}
-
-export function getAboutMetadata(locale: SiteLocale = "fr"): Metadata {
-  return getPageMetadata({
-    title: "À propos",
-    description:
-      "Découvrez AcheteTonCell, service québécois de rachat de téléphones cellulaires.",
-    url: "/a-propos",
-    locale,
-  });
-}
-
-export function getBusinessMetadata(locale: SiteLocale = "fr"): Metadata {
-  return getPageMetadata({
-    title: locale === "en" ? "Business services" : "Service aux entreprises",
-    description:
-      locale === "en"
-        ? "Bulk device trade-in and tailored solutions for organizations in Quebec."
-        : "Rachat d'appareils en volume et solutions sur mesure pour les organisations au Québec.",
-    url: "/service-aux-entreprises",
-    locale,
-  });
-}
-
 /**
  * Metadata for the thank-you page.
  */
@@ -282,7 +250,7 @@ export function getMerciMetadata(locale: SiteLocale = "fr"): Metadata {
 export function getAdminMetadata(): Metadata {
   return getPageMetadata({
     title: "Administration",
-    description: "Panneau d'administration AcheteTonCell",
+    description: "Panneau d'administration",
     url: "/admin",
     noindex: true, // Do not index admin pages
   });
@@ -299,7 +267,7 @@ export function getOpenGraphTags() {
     "og:image:type": "image/png",
     "og:image:width": "1200",
     "og:image:height": "630",
-    "og:image:alt": "AcheteTonCell - Rachat cellulaire au Québec",
+    "og:image:alt": "Rachat cellulaire au Québec",
     // Brand color for OpenGraph cards
     "theme-color": brandColor,
   };
