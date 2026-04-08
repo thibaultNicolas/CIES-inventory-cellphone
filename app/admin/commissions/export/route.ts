@@ -95,7 +95,7 @@ export async function GET(request: Request) {
             .range(start, end);
 
           if (scope === "filtered") {
-            q = applyCommissionFilters(q as never, {
+            q = applyCommissionFilters(q, {
               fromDate: from,
               toDate: to,
               commissionPaid:
@@ -104,7 +104,7 @@ export async function GET(request: Request) {
                   : "all",
               employeeFullName: employee,
               storeName: store,
-            }) as typeof q;
+            });
           }
 
           const { data, error } = await q;

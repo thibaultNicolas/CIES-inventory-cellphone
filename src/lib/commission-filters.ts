@@ -18,27 +18,27 @@ type QueryLike = {
   eq: (column: string, value: string | boolean) => QueryLike;
 };
 
-export function applyCommissionFilters<T extends QueryLike>(
+export function applyCommissionFilters<T>(
   query: T,
   params: CommissionFilterParams,
 ): T {
-  let q = query;
+  let q = query as unknown as QueryLike;
   if (isValidDateInput(params.fromDate)) {
-    q = q.gte("created_at", `${params.fromDate}T00:00:00.000Z`) as T;
+    q = q.gte("created_at", `${params.fromDate}T00:00:00.000Z`);
   }
   if (isValidDateInput(params.toDate)) {
-    q = q.lte("created_at", `${params.toDate}T23:59:59.999Z`) as T;
+    q = q.lte("created_at", `${params.toDate}T23:59:59.999Z`);
   }
   if (params.commissionPaid === "paid") {
-    q = q.eq("commission_paid", true) as T;
+    q = q.eq("commission_paid", true);
   } else if (params.commissionPaid === "unpaid") {
-    q = q.eq("commission_paid", false) as T;
+    q = q.eq("commission_paid", false);
   }
   if (params.employeeFullName) {
-    q = q.eq("employee_full_name", params.employeeFullName) as T;
+    q = q.eq("employee_full_name", params.employeeFullName);
   }
   if (params.storeName) {
-    q = q.eq("store_name", params.storeName) as T;
+    q = q.eq("store_name", params.storeName);
   }
-  return q;
+  return q as unknown as T;
 }
