@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import {
   Table,
   TableBody,
@@ -11,11 +11,33 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { updateCommissionPaid } from "../../actions/update-commission-paid";
 import { useI18n } from "@/contexts/I18nContext";
-import type { CommissionsData } from "./AdminLayout";
+import type { CommissionsData, CommissionReportAggregates } from "./AdminLayout";
 import { submissionLineTotal } from "@/lib/submissions";
-import { Filter, Smartphone, CheckCircle, Clock, ChevronLeft, ChevronRight, Coins } from "lucide-react";
+import {
+  Filter,
+  Smartphone,
+  CheckCircle,
+  Clock,
+  ChevronLeft,
+  ChevronRight,
+  Coins,
+  FileDown,
+} from "lucide-react";
+import {
+  ResponsiveContainer,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  PieChart,
+  Pie,
+  Cell,
+  ComposedChart,
+} from "recharts";
 
 type PeriodPreset =
   | "all"
@@ -30,6 +52,19 @@ type PeriodPreset =
 
 type CommissionPaidFilter = "all" | "paid" | "unpaid";
 type CommissionTypeFilter = "all" | "employee" | "manager" | "owner";
+
+const PIE_COLORS = ["#0026FF", "#000072", "#4F6BFF"];
+
+const EMPTY_AGG: CommissionReportAggregates = {
+  totalUnits: 0,
+  totalBuyback: 0,
+  totalCommissionEmployee: 0,
+  totalCommissionManager: 0,
+  totalCommissionOwner: 0,
+  totalCommission: 0,
+  salesByMonth: [],
+  topModels: [],
+};
 
 function startOfDay(date: Date) {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate(), 0, 0, 0, 0);
@@ -144,26 +179,74 @@ function buildCommissionsExportUrl(params: {
 
 type CommissionsDashboardProps = {
   commissionsData: CommissionsData | null;
+  commissionReportAggregates: CommissionReportAggregates | null;
   employees: { id: string; full_name: string }[];
   stores: { id: string; name: string }[];
-  /** Basculer payé / non payé : super_admin uniquement. */
-  canManageCommissionPaid?: boolean;
+  /** PDF réservé au super administrateur ; CSV reste disponible pour les admins. */
+  canExportPdf?: boolean;
 };
 
 export function CommissionsDashboard({
   commissionsData,
+  commissionReportAggregates,
   employees,
   stores,
-  canManageCommissionPaid = false,
+  canExportPdf = false,
 }: CommissionsDashboardProps) {
   const router = useRouter();
   const { t, locale } = useI18n();
   const [isPending, startTransition] = useTransition();
+  const [commissionType, setCommissionType] = useState<CommissionTypeFilter>("all");
+
+  const agg = commissionReportAggregates ?? EMPTY_AGG;
+
+  const salesChartData = useMemo(() => {
+    return agg.salesByMonth.map((row) => {
+      const [y, m] = row.monthKey.split("-").map(Number);
+      const label = new Date(Date.UTC(y, m - 1, 1)).toLocaleDateString(
+        locale === "en" ? "en-CA" : "fr-CA",
+        { month: "short", year: "numeric" },
+      );
+      return {
+        ...row,
+        label,
+        buyback: Math.round(row.buyback * 100) / 100,
+      };
+    });
+  }, [agg.salesByMonth, locale]);
+
+  const commissionPieData = useMemo(
+    () => [
+      { name: t.admin.employeeCommission, value: agg.totalCommissionEmployee },
+      { name: t.admin.managerCommission, value: agg.totalCommissionManager },
+      { name: t.admin.ownerCommission, value: agg.totalCommissionOwner },
+    ],
+    [
+      agg.totalCommissionEmployee,
+      agg.totalCommissionManager,
+      agg.totalCommissionOwner,
+      t.admin.employeeCommission,
+      t.admin.managerCommission,
+      t.admin.ownerCommission,
+    ],
+  );
+
+  const topModelsChart = useMemo(
+    () =>
+      [...agg.topModels]
+        .slice(0, 10)
+        .map((m) => ({
+          ...m,
+          labelShort: m.label.length > 42 ? `${m.label.slice(0, 40)}…` : m.label,
+        }))
+        .reverse(),
+    [agg.topModels],
+  );
 
   if (!commissionsData) {
     return (
       <div className="rounded-card border border-foreground/10 bg-background p-12 text-center text-foreground/60">
-        {t.admin.loadingCommissions}
+        {t.admin.reportLoading}
       </div>
     );
   }
@@ -171,10 +254,6 @@ export function CommissionsDashboard({
   const {
     submissions,
     total,
-    unpaidTotal,
-    unpaidEmployeeTotal,
-    unpaidManagerTotal,
-    unpaidOwnerTotal,
     page,
     pageSize,
     fromDate,
@@ -183,33 +262,78 @@ export function CommissionsDashboard({
     employeeFullName,
     storeName,
   } = commissionsData;
-  const [commissionType, setCommissionType] = useState<CommissionTypeFilter>("all");
   const employeeFilter = employeeFullName || "all";
   const storeFilter = storeName || "all";
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
-  const commissionAmountForPeriod =
+
+  const commissionTotalForType =
     commissionType === "employee"
-      ? unpaidEmployeeTotal
+      ? agg.totalCommissionEmployee
       : commissionType === "manager"
-        ? unpaidManagerTotal
+        ? agg.totalCommissionManager
         : commissionType === "owner"
-          ? unpaidOwnerTotal
-          : unpaidTotal;
-  const paidOnPage = submissions.filter((s) => s.commission_paid).length;
-  const unpaidOnPage = submissions.length - paidOnPage;
-  const employeeOnPage = submissions.reduce(
-    (sum, s) => sum + Number(s.commission_employee ?? 0),
-    0,
-  );
-  const managerOnPage = submissions.reduce(
-    (sum, s) => sum + Number(s.commission_manager ?? 0),
-    0,
-  );
-  const ownerOnPage = submissions.reduce(
-    (sum, s) => sum + Number(s.commission_owner ?? 0),
-    0,
-  );
+          ? agg.totalCommissionOwner
+          : agg.totalCommission;
+
+  const handleExportPdf = async () => {
+    const { jsPDF } = await import("jspdf");
+    const doc = new jsPDF();
+    const margin = 14;
+    let y = 16;
+    doc.setFontSize(15);
+    doc.text(locale === "en" ? "Trade-in report" : "Rapport rachats", margin, y);
+    y += 8;
+    doc.setFontSize(10);
+    const period =
+      fromDate && toDate
+        ? `${fromDate} – ${toDate}`
+        : fromDate
+          ? `${fromDate} →`
+          : toDate
+            ? `→ ${toDate}`
+            : locale === "en"
+              ? "All periods"
+              : "Toutes periodes";
+    doc.text(period, margin, y);
+    y += 10;
+    const lines = [
+      `${locale === "en" ? "Units" : "Unites"}: ${agg.totalUnits}`,
+      `${locale === "en" ? "Buyback" : "Rachats"}: ${agg.totalBuyback.toFixed(2)} $`,
+      `${locale === "en" ? "Commissions" : "Commissions"}: ${agg.totalCommission.toFixed(2)} $`,
+      `  ${locale === "en" ? "Employee" : "Employe"}: ${agg.totalCommissionEmployee.toFixed(2)} $`,
+      `  ${locale === "en" ? "Manager" : "Gerant"}: ${agg.totalCommissionManager.toFixed(2)} $`,
+      `  ${locale === "en" ? "Owner" : "Proprio"}: ${agg.totalCommissionOwner.toFixed(2)} $`,
+    ];
+    for (const line of lines) {
+      doc.text(line, margin, y);
+      y += 6;
+      if (y > 270) {
+        doc.addPage();
+        y = 16;
+      }
+    }
+    y += 4;
+    doc.setFontSize(11);
+    doc.text(
+      locale === "en" ? "Top models (units)" : "Appareils les plus rachetes",
+      margin,
+      y,
+    );
+    y += 7;
+    doc.setFontSize(9);
+    for (const m of agg.topModels.slice(0, 10)) {
+      const safe = m.label.replace(/[^\x00-\x7F]/g, "?");
+      const txt = `${safe.slice(0, 52)}: ${m.units} / ${m.buyback.toFixed(0)} $`;
+      doc.text(txt, margin, y);
+      y += 5;
+      if (y > 280) {
+        doc.addPage();
+        y = 16;
+      }
+    }
+    doc.save(`rapport-rachats-${new Date().toISOString().slice(0, 10)}.pdf`);
+  };
 
   const handlePeriodPreset = (preset: PeriodPreset) => {
     if (preset === "all") {
@@ -362,18 +486,6 @@ export function CommissionsDashboard({
     });
   };
 
-  const handleTogglePaid = async (submissionId: string, current: boolean) => {
-    const result = await updateCommissionPaid({
-      submissionId,
-      commissionPaid: !current,
-    });
-    if (result.success) {
-      router.refresh();
-    } else {
-      alert(t.admin.errorUpdate);
-    }
-  };
-
   const from = (page - 1) * pageSize + 1;
   const to = Math.min(page * pageSize, total);
 
@@ -381,7 +493,7 @@ export function CommissionsDashboard({
     <div className="space-y-6">
       {isPending ? (
         <div className="rounded-card border border-brand-primary/25 bg-brand-primary/8 px-4 py-2 text-xs font-medium text-brand-primary">
-          {t.admin.loadingCommissions}
+          {t.admin.reportLoading}
         </div>
       ) : null}
       <section className="space-y-3 rounded-card border border-foreground/10 bg-background p-4 shadow-soft">
@@ -390,6 +502,16 @@ export function CommissionsDashboard({
             Filtres
           </h3>
           <div className="flex flex-wrap items-center gap-2">
+            {canExportPdf ? (
+              <button
+                type="button"
+                onClick={() => void handleExportPdf()}
+                className="inline-flex items-center gap-1.5 rounded-card border border-foreground/20 px-3 py-1.5 text-xs text-foreground/80 transition-colors hover:bg-foreground/5"
+              >
+                <FileDown className="h-3.5 w-3.5" />
+                {t.admin.exportPdfLabel}
+              </button>
+            ) : null}
             <a
               href={buildCommissionsExportUrl({
                 scope: "filtered",
@@ -509,127 +631,239 @@ export function CommissionsDashboard({
 
       <section className="space-y-3 rounded-card border border-foreground/10 bg-background p-4 shadow-soft">
         <h3 className="text-sm font-semibold uppercase tracking-[0.08em] text-foreground/70">
-          Stats
+          {t.admin.reportStatsSectionTitle}
         </h3>
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-6">
-        <div className="rounded-card border border-foreground/10 bg-background p-4 shadow-soft">
-          <div className="flex items-center gap-2 text-foreground/60">
-            <Smartphone className="h-5 w-5" />
-            <span className="text-sm font-medium">{t.admin.devicesFilter}</span>
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="rounded-card border border-foreground/10 bg-background p-4 shadow-soft">
+            <div className="flex items-center gap-2 text-foreground/60">
+              <Smartphone className="h-5 w-5" />
+              <span className="text-sm font-medium">{t.admin.reportUnitsTotalLabel}</span>
+            </div>
+            <p className="mt-2 font-(family-name:--font-playfair) text-3xl font-light text-brand-dark">
+              {agg.totalUnits}
+            </p>
           </div>
-          <p className="mt-2 font-(family-name:--font-playfair) text-3xl font-light text-brand-dark">
-            {total}
-          </p>
-        </div>
-        <div className="rounded-card border border-foreground/10 bg-background p-4 shadow-soft">
-          <div className="flex items-center gap-2 text-foreground/60">
-            <Coins className="h-5 w-5" />
-            <span className="text-sm font-medium">{t.admin.commissionAmount}</span>
+          <div className="rounded-card border border-foreground/10 bg-background p-4 shadow-soft">
+            <div className="flex items-center gap-2 text-foreground/60">
+              <Coins className="h-5 w-5" />
+              <span className="text-sm font-medium">{t.admin.reportStatBuybackLabel}</span>
+            </div>
+            <p className="mt-2 font-(family-name:--font-playfair) text-3xl font-light text-brand-dark">
+              {agg.totalBuyback.toFixed(2)} $
+            </p>
           </div>
-          <p className="mt-2 font-(family-name:--font-playfair) text-3xl font-light text-brand-dark">
-            {commissionAmountForPeriod.toFixed(2)} $
-          </p>
-        </div>
-        <div className="rounded-card border border-foreground/10 bg-background p-4 shadow-soft">
-          <div className="flex items-center gap-2 text-foreground/60">
-            <Coins className="h-5 w-5" />
-            <span className="text-sm font-medium">{t.admin.employeeCommission}</span>
+          <div className="rounded-card border border-foreground/10 bg-background p-4 shadow-soft">
+            <div className="flex items-center gap-2 text-foreground/60">
+              <Coins className="h-5 w-5" />
+              <span className="text-sm font-medium">{t.admin.commissionAmount}</span>
+            </div>
+            <p className="mt-2 font-(family-name:--font-playfair) text-3xl font-light text-brand-dark">
+              {commissionTotalForType.toFixed(2)} $
+            </p>
           </div>
-          <p className="mt-2 font-(family-name:--font-playfair) text-3xl font-light text-brand-dark">
-            {employeeOnPage.toFixed(2)} $
-          </p>
-        </div>
-        <div className="rounded-card border border-foreground/10 bg-background p-4 shadow-soft">
-          <div className="flex items-center gap-2 text-foreground/60">
-            <Coins className="h-5 w-5" />
-            <span className="text-sm font-medium">{t.admin.managerCommission}</span>
+          <div className="rounded-card border border-foreground/10 bg-background p-4 shadow-soft">
+            <div className="flex items-center gap-2 text-foreground/60">
+              <Coins className="h-5 w-5" />
+              <span className="text-sm font-medium">{t.admin.employeeCommission}</span>
+            </div>
+            <p className="mt-2 font-(family-name:--font-playfair) text-3xl font-light text-brand-dark">
+              {agg.totalCommissionEmployee.toFixed(2)} $
+            </p>
           </div>
-          <p className="mt-2 font-(family-name:--font-playfair) text-3xl font-light text-brand-dark">
-            {managerOnPage.toFixed(2)} $
-          </p>
-        </div>
-        <div className="rounded-card border border-foreground/10 bg-background p-4 shadow-soft">
-          <div className="flex items-center gap-2 text-foreground/60">
-            <Coins className="h-5 w-5" />
-            <span className="text-sm font-medium">{t.admin.ownerCommission}</span>
+          <div className="rounded-card border border-foreground/10 bg-background p-4 shadow-soft">
+            <div className="flex items-center gap-2 text-foreground/60">
+              <Coins className="h-5 w-5" />
+              <span className="text-sm font-medium">{t.admin.managerCommission}</span>
+            </div>
+            <p className="mt-2 font-(family-name:--font-playfair) text-3xl font-light text-brand-dark">
+              {agg.totalCommissionManager.toFixed(2)} $
+            </p>
           </div>
-          <p className="mt-2 font-(family-name:--font-playfair) text-3xl font-light text-brand-dark">
-            {ownerOnPage.toFixed(2)} $
-          </p>
-        </div>
-        <div className="rounded-card border border-foreground/10 bg-background p-4 shadow-soft">
-          <div className="flex items-center gap-2 text-foreground/60">
-            <CheckCircle className="h-5 w-5 text-green-600" />
-            <span className="text-sm font-medium">{t.admin.commissionPaidPage}</span>
+          <div className="rounded-card border border-foreground/10 bg-background p-4 shadow-soft">
+            <div className="flex items-center gap-2 text-foreground/60">
+              <Coins className="h-5 w-5" />
+              <span className="text-sm font-medium">{t.admin.ownerCommission}</span>
+            </div>
+            <p className="mt-2 font-(family-name:--font-playfair) text-3xl font-light text-brand-dark">
+              {agg.totalCommissionOwner.toFixed(2)} $
+            </p>
           </div>
-          <p className="mt-2 font-(family-name:--font-playfair) text-3xl font-light text-green-700">
-            {paidOnPage}
-          </p>
-        </div>
-        <div className="rounded-card border border-foreground/10 bg-background p-4 shadow-soft">
-          <div className="flex items-center gap-2 text-foreground/60">
-            <Clock className="h-5 w-5 text-amber-600" />
-            <span className="text-sm font-medium">{t.admin.unpaidPage}</span>
-          </div>
-          <p className="mt-2 font-(family-name:--font-playfair) text-3xl font-light text-amber-700">
-            {unpaidOnPage}
-          </p>
-        </div>
         </div>
       </section>
 
       <section className="space-y-3">
         <h3 className="text-sm font-semibold uppercase tracking-[0.08em] text-foreground/70">
-          Liste des cells rachetés
+          {t.admin.reportChartsSectionTitle}
         </h3>
-        <div className="rounded-card border border-foreground/10 bg-background shadow-soft overflow-x-auto">
-        <Table className="min-w-[600px]">
-          <TableHeader>
-            <TableRow>
-              <TableHead className="px-3 sm:px-6">{t.admin.date}</TableHead>
-              <TableHead className="px-3 sm:px-6">{t.admin.client}</TableHead>
-              <TableHead className="px-3 sm:px-6">{t.admin.device}</TableHead>
-              <TableHead className="text-center px-3 sm:px-6">{t.admin.quantity}</TableHead>
-              <TableHead className="px-3 sm:px-6">{t.admin.price}</TableHead>
-              <TableHead className="px-3 sm:px-6">{t.admin.employeeCommission}</TableHead>
-              <TableHead className="px-3 sm:px-6">{t.admin.managerCommission}</TableHead>
-              <TableHead className="px-3 sm:px-6">{t.admin.ownerCommission}</TableHead>
-              <TableHead className="text-center px-3 sm:px-6">{t.admin.commissionPaid}</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {submissions.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={9} className="px-3 py-8 text-center text-foreground/60 sm:px-6">
-                  {t.admin.noDevicesForPeriod}
-                </TableCell>
-              </TableRow>
+        <div className="grid gap-4 lg:grid-cols-2">
+          <div className="rounded-card border border-foreground/10 bg-background p-4 shadow-soft">
+            <h4 className="mb-3 text-xs font-semibold text-foreground/80">
+              {t.admin.reportChartSalesByMonth}
+            </h4>
+            {salesChartData.length === 0 ? (
+              <p className="py-12 text-center text-sm text-foreground/50">{t.admin.noDevicesForPeriod}</p>
             ) : (
-              submissions.map((submission) => (
-                <TableRow key={submission.id}>
-                  <TableCell className="whitespace-nowrap px-3 py-3 text-sm text-foreground/70 sm:px-6 sm:py-4">
-                    {formatDate(submission.created_at, locale)}
+              <div className="h-[280px] w-full min-w-0">
+                <ResponsiveContainer width="100%" height="100%">
+                  <ComposedChart data={salesChartData} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" className="stroke-foreground/10" />
+                    <XAxis dataKey="label" tick={{ fontSize: 11 }} className="fill-foreground/60" />
+                    <YAxis
+                      yAxisId="buyback"
+                      orientation="left"
+                      tick={{ fontSize: 11 }}
+                      className="fill-foreground/60"
+                    />
+                    <YAxis
+                      yAxisId="units"
+                      orientation="right"
+                      tick={{ fontSize: 11 }}
+                      className="fill-foreground/60"
+                    />
+                    <Tooltip
+                      contentStyle={{
+                        borderRadius: 8,
+                        border: "1px solid rgba(0,0,0,0.08)",
+                      }}
+                    />
+                    <Legend />
+                    <Bar
+                      yAxisId="buyback"
+                      dataKey="buyback"
+                      name={t.admin.reportAxisBuyback}
+                      fill="#0026FF"
+                      radius={[4, 4, 0, 0]}
+                    />
+                    <Bar
+                      yAxisId="units"
+                      dataKey="units"
+                      name={t.admin.reportAxisUnits}
+                      fill="#4F6BFF"
+                      radius={[4, 4, 0, 0]}
+                    />
+                  </ComposedChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+          </div>
+
+          <div className="rounded-card border border-foreground/10 bg-background p-4 shadow-soft">
+            <h4 className="mb-3 text-xs font-semibold text-foreground/80">
+              {t.admin.reportChartCommissionByType}
+            </h4>
+            {agg.totalCommission <= 0 ? (
+              <p className="py-12 text-center text-sm text-foreground/50">{t.admin.noDevicesForPeriod}</p>
+            ) : (
+              <div className="h-[280px] w-full min-w-0">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={commissionPieData}
+                      dataKey="value"
+                      nameKey="name"
+                      cx="50%"
+                      cy="50%"
+                      outerRadius={90}
+                      label={({ name, percent }) =>
+                        `${name ?? ""} ${((percent ?? 0) * 100).toFixed(0)}%`
+                      }
+                    >
+                      {commissionPieData.map((_, i) => (
+                        <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip
+                      formatter={(v) => [
+                        `${Number(v ?? 0).toFixed(2)} $`,
+                        t.admin.commissionAmount,
+                      ]}
+                    />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+          </div>
+
+          <div className="rounded-card border border-foreground/10 bg-background p-4 shadow-soft lg:col-span-2">
+            <h4 className="mb-3 text-xs font-semibold text-foreground/80">
+              {t.admin.reportChartTopModels}
+            </h4>
+            {topModelsChart.length === 0 ? (
+              <p className="py-12 text-center text-sm text-foreground/50">{t.admin.noDevicesForPeriod}</p>
+            ) : (
+              <div className="h-[320px] w-full min-w-0">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart
+                    layout="vertical"
+                    data={topModelsChart}
+                    margin={{ top: 8, right: 24, left: 8, bottom: 8 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" className="stroke-foreground/10" horizontal={false} />
+                    <XAxis type="number" tick={{ fontSize: 11 }} />
+                    <YAxis
+                      type="category"
+                      dataKey="labelShort"
+                      width={148}
+                      tick={{ fontSize: 10 }}
+                    />
+                    <Tooltip />
+                    <Bar dataKey="units" name={t.admin.reportAxisUnits} fill="#0026FF" radius={[0, 4, 4, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+          </div>
+        </div>
+      </section>
+
+      <section className="space-y-3">
+        <h3 className="text-sm font-semibold uppercase tracking-[0.08em] text-foreground/70">
+          {t.admin.reportTableTitle}
+        </h3>
+        <div className="overflow-x-auto rounded-card border border-foreground/10 bg-background shadow-soft">
+          <Table className="min-w-[600px]">
+            <TableHeader>
+              <TableRow>
+                <TableHead className="px-3 sm:px-6">{t.admin.date}</TableHead>
+                <TableHead className="px-3 sm:px-6">{t.admin.client}</TableHead>
+                <TableHead className="px-3 sm:px-6">{t.admin.device}</TableHead>
+                <TableHead className="px-3 text-center sm:px-6">{t.admin.quantity}</TableHead>
+                <TableHead className="px-3 sm:px-6">{t.admin.price}</TableHead>
+                <TableHead className="px-3 sm:px-6">{t.admin.employeeCommission}</TableHead>
+                <TableHead className="px-3 sm:px-6">{t.admin.managerCommission}</TableHead>
+                <TableHead className="px-3 sm:px-6">{t.admin.ownerCommission}</TableHead>
+                <TableHead className="px-3 text-center sm:px-6">{t.admin.commissionPaid}</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {submissions.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={9} className="px-3 py-8 text-center text-foreground/60 sm:px-6">
+                    {t.admin.noDevicesForPeriod}
                   </TableCell>
-                  <TableCell className="px-3 py-3 font-medium text-foreground sm:px-6 sm:py-4">
-                    {submission.client_full_name || submission.customer_name}
-                  </TableCell>
-                  <TableCell className="px-3 py-3 sm:px-6 sm:py-4">
-                    <span className="text-foreground/80">
-                      {submission.brand_name} {submission.model_name}
-                    </span>
-                    <span className="ml-1 text-xs text-foreground/60">
-                      {submission.memory} – {submission.condition}
-                    </span>
-                  </TableCell>
+                </TableRow>
+              ) : (
+                submissions.map((submission) => (
+                  <TableRow key={submission.id}>
+                    <TableCell className="whitespace-nowrap px-3 py-3 text-sm text-foreground/70 sm:px-6 sm:py-4">
+                      {formatDate(submission.created_at, locale)}
+                    </TableCell>
+                    <TableCell className="px-3 py-3 font-medium text-foreground sm:px-6 sm:py-4">
+                      {submission.client_full_name || submission.customer_name}
+                    </TableCell>
+                    <TableCell className="px-3 py-3 sm:px-6 sm:py-4">
+                      <span className="text-foreground/80">
+                        {submission.brand_name} {submission.model_name}
+                      </span>
+                      <span className="ml-1 text-xs text-foreground/60">
+                        {submission.memory} – {submission.condition}
+                      </span>
+                    </TableCell>
                     <TableCell className="px-3 py-3 text-center text-sm text-foreground sm:px-6 sm:py-4">
                       {submission.quantity}
                     </TableCell>
                     <TableCell className="px-3 py-3 font-medium text-brand-primary sm:px-6 sm:py-4">
-                      {submissionLineTotal(
-                        submission.price,
-                        submission.quantity,
-                      ).toFixed(2)}{" "}
-                      $
+                      {submissionLineTotal(submission.price, submission.quantity).toFixed(2)} $
                     </TableCell>
                     <TableCell className="px-3 py-3 font-medium text-foreground sm:px-6 sm:py-4">
                       {Number(submission.commission_employee ?? 0).toFixed(2)} $
@@ -640,58 +874,26 @@ export function CommissionsDashboard({
                     <TableCell className="px-3 py-3 font-medium text-foreground sm:px-6 sm:py-4">
                       {Number(submission.commission_owner ?? 0).toFixed(2)} $
                     </TableCell>
-                    <TableCell className="text-center px-3 py-3 sm:px-6 sm:py-4">
-                      {canManageCommissionPaid ? (
-                        <button
-                          type="button"
-                          onClick={() =>
-                            handleTogglePaid(submission.id, submission.commission_paid)
-                          }
-                          className={`inline-flex items-center gap-1.5 rounded-card border-2 px-3 py-2 text-sm font-medium transition-all ${
-                            submission.commission_paid
-                              ? "border-green-500/50 bg-green-500/10 text-green-700"
-                              : "border-foreground/20 bg-foreground/5 text-foreground/70 hover:border-amber-500/50 hover:bg-amber-500/10 hover:text-amber-700"
-                          }`}
-                          aria-pressed={submission.commission_paid}
-                          aria-label={
-                            submission.commission_paid
-                              ? t.admin.markAsUnpaid
-                              : t.admin.markAsPaid
-                          }
-                        >
-                          {submission.commission_paid ? (
-                            <>
-                              <CheckCircle className="h-4 w-4" />
-                              {t.admin.yes}
-                            </>
-                          ) : (
-                            <>
-                              <Clock className="h-4 w-4" />
-                              {t.admin.no}
-                            </>
-                          )}
-                        </button>
-                      ) : (
-                        <span
-                          className={`inline-flex items-center gap-1.5 rounded-card border-2 px-3 py-2 text-sm font-medium ${
-                            submission.commission_paid
-                              ? "border-green-500/50 bg-green-500/10 text-green-700"
-                              : "border-foreground/20 bg-foreground/5 text-foreground/70"
-                          }`}
-                        >
-                          {submission.commission_paid ? (
-                            <>
-                              <CheckCircle className="h-4 w-4" />
-                              {t.admin.yes}
-                            </>
-                          ) : (
-                            <>
-                              <Clock className="h-4 w-4" />
-                              {t.admin.no}
-                            </>
-                          )}
-                        </span>
-                      )}
+                    <TableCell className="px-3 py-3 text-center sm:px-6 sm:py-4">
+                      <span
+                        className={`inline-flex items-center gap-1.5 rounded-card border-2 px-3 py-2 text-sm font-medium ${
+                          submission.commission_paid
+                            ? "border-green-500/50 bg-green-500/10 text-green-700"
+                            : "border-foreground/20 bg-foreground/5 text-foreground/70"
+                        }`}
+                      >
+                        {submission.commission_paid ? (
+                          <>
+                            <CheckCircle className="h-4 w-4" />
+                            {t.admin.yes}
+                          </>
+                        ) : (
+                          <>
+                            <Clock className="h-4 w-4" />
+                            {t.admin.no}
+                          </>
+                        )}
+                      </span>
                     </TableCell>
                   </TableRow>
                 ))
@@ -699,64 +901,64 @@ export function CommissionsDashboard({
             </TableBody>
           </Table>
 
-        {totalPages > 1 && (
-          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-foreground/10 px-3 py-3 sm:gap-4 sm:px-4">
-            <p className="text-sm text-foreground/60">
-              {total > 0 ? (
-                <>
-                  Affichage {from}–{to} sur {total}
-                </>
-              ) : (
-                "Aucun résultat"
-              )}
-            </p>
-            <div className="flex items-center gap-2">
-              <Link
-                href={`/admin?${buildCommissionsQuery({
-                  page: page - 1,
-                  pageSize,
-                  from: fromDate || undefined,
-                  to: toDate || undefined,
-                  commissionPaid,
-                  employeeFullName: employeeFilter === "all" ? undefined : employeeFilter,
-                  storeName: storeFilter === "all" ? undefined : storeFilter,
-                })}`}
-                className={`inline-flex items-center gap-1 rounded-card border-2 px-3 py-2 text-sm font-medium transition-all ${
-                  page <= 1
-                    ? "pointer-events-none border-foreground/10 text-foreground/40"
-                    : "border-foreground/20 text-foreground hover:bg-foreground/5"
-                }`}
-                aria-disabled={page <= 1}
-              >
-                <ChevronLeft className="h-4 w-4" />
-                Précédent
-              </Link>
-              <span className="px-2 text-sm text-foreground/70">
-                Page {page} / {totalPages}
-              </span>
-              <Link
-                href={`/admin?${buildCommissionsQuery({
-                  page: page + 1,
-                  pageSize,
-                  from: fromDate || undefined,
-                  to: toDate || undefined,
-                  commissionPaid,
-                  employeeFullName: employeeFilter === "all" ? undefined : employeeFilter,
-                  storeName: storeFilter === "all" ? undefined : storeFilter,
-                })}`}
-                className={`inline-flex items-center gap-1 rounded-card border-2 px-3 py-2 text-sm font-medium transition-all ${
-                  page >= totalPages
-                    ? "pointer-events-none border-foreground/10 text-foreground/40"
-                    : "border-foreground/20 text-foreground hover:bg-foreground/5"
-                }`}
-                aria-disabled={page >= totalPages}
-              >
-                Suivant
-                <ChevronRight className="h-4 w-4" />
-              </Link>
+          {totalPages > 1 && (
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-foreground/10 px-3 py-3 sm:gap-4 sm:px-4">
+              <p className="text-sm text-foreground/60">
+                {total > 0 ? (
+                  <>
+                    Affichage {from}–{to} sur {total}
+                  </>
+                ) : (
+                  "Aucun résultat"
+                )}
+              </p>
+              <div className="flex items-center gap-2">
+                <Link
+                  href={`/admin?${buildCommissionsQuery({
+                    page: page - 1,
+                    pageSize,
+                    from: fromDate || undefined,
+                    to: toDate || undefined,
+                    commissionPaid,
+                    employeeFullName: employeeFilter === "all" ? undefined : employeeFilter,
+                    storeName: storeFilter === "all" ? undefined : storeFilter,
+                  })}`}
+                  className={`inline-flex items-center gap-1 rounded-card border-2 px-3 py-2 text-sm font-medium transition-all ${
+                    page <= 1
+                      ? "pointer-events-none border-foreground/10 text-foreground/40"
+                      : "border-foreground/20 text-foreground hover:bg-foreground/5"
+                  }`}
+                  aria-disabled={page <= 1}
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                  Précédent
+                </Link>
+                <span className="px-2 text-sm text-foreground/70">
+                  Page {page} / {totalPages}
+                </span>
+                <Link
+                  href={`/admin?${buildCommissionsQuery({
+                    page: page + 1,
+                    pageSize,
+                    from: fromDate || undefined,
+                    to: toDate || undefined,
+                    commissionPaid,
+                    employeeFullName: employeeFilter === "all" ? undefined : employeeFilter,
+                    storeName: storeFilter === "all" ? undefined : storeFilter,
+                  })}`}
+                  className={`inline-flex items-center gap-1 rounded-card border-2 px-3 py-2 text-sm font-medium transition-all ${
+                    page >= totalPages
+                      ? "pointer-events-none border-foreground/10 text-foreground/40"
+                      : "border-foreground/20 text-foreground hover:bg-foreground/5"
+                  }`}
+                  aria-disabled={page >= totalPages}
+                >
+                  Suivant
+                  <ChevronRight className="h-4 w-4" />
+                </Link>
+              </div>
             </div>
-          </div>
-        )}
+          )}
         </div>
       </section>
     </div>

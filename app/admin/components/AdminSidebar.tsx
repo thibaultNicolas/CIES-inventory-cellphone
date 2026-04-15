@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { Users, ShoppingBag, Package, DollarSign, Building2 } from "lucide-react";
+import { Users, ShoppingBag, Package, BarChart3, Building2, Wallet } from "lucide-react";
 import { useI18n } from "@/contexts/I18nContext";
 
 type AdminSection =
@@ -9,7 +9,8 @@ type AdminSection =
   | "referentiel"
   | "demandes"
   | "produits"
-  | "commissions";
+  | "commissions"
+  | "caisse";
 
 type AdminSidebarProps = {
   activeSection: AdminSection;
@@ -37,7 +38,8 @@ export function AdminSidebar({
         icon: Building2,
       },
       { id: "demandes" as const, label: t.admin.tradeInRequests, icon: ShoppingBag },
-      { id: "commissions" as const, label: t.admin.commissions, icon: DollarSign },
+      { id: "commissions" as const, label: t.admin.commissions, icon: BarChart3 },
+      { id: "caisse" as const, label: t.admin.pettyCashNav, icon: Wallet },
       ...(showProductsSection
         ? [{ id: "produits" as const, label: t.admin.products, icon: Package }]
         : []),

@@ -11,8 +11,7 @@ import {
 import { checkRateLimit } from "@/lib/rate-limit-memory";
 import { getRequestIpForRateLimit } from "@/lib/request-ip";
 import { isUuid, signRachatViewToken } from "@/lib/rachat-view-token";
-import { computeCommissionFromGross } from "@/lib/commission-policy";
-import { submissionLineTotal } from "@/lib/submissions";
+import { computeCommissionForLineUnits } from "@/lib/commission-policy";
 import { getActiveCommissionRules } from "@/lib/commission-rules-server";
 
 type SubmitRachatDevice = {
@@ -397,8 +396,11 @@ export async function submitRachat(data: SubmitRachatData) {
 
   const payloads = devices.map((device) => ({
     ...(function () {
-      const gross = submissionLineTotal(device.price, clampSubmissionQuantity(device.quantity));
-      const commission = computeCommissionFromGross(gross, commissionRules);
+      const commission = computeCommissionForLineUnits(
+        device.price,
+        clampSubmissionQuantity(device.quantity),
+        commissionRules,
+      );
       return {
         commission_employee: commission.employee,
         commission_manager: commission.manager,

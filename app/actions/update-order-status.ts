@@ -16,6 +16,10 @@ export async function updateOrderStatus({ orderId, status }: UpdateOrderStatusPa
     return { success: false, error: "Unauthorized" };
   }
 
+  if (admin.role !== "super_admin" && status !== "cancelled") {
+    return { success: false, error: "Forbidden" };
+  }
+
   const supabase = createAdminClient();
 
   // First, try updating by `request_group_id` (the real order id).

@@ -5,7 +5,9 @@ import {
   SUBMISSIONS_SELECT_ADMIN_LIST,
   submissionLineTotal,
 } from "@/lib/submissions";
-import { AdminLayout } from "./components/AdminLayout";
+import { AdminLayout, type CommissionReportAggregates } from "./components/AdminLayout";
+import type { ProductsPricesFiltersInit } from "./components/ProductsManager";
+import { buildStoreCashflowSnapshot } from "@/lib/petty-cash";
 import { getStaff, requireAdmin } from "@/lib/admin-auth";
 import { parseAppRole, type AppRole } from "@/lib/app-role";
 import { applyCommissionFilters } from "@/lib/commission-filters";
@@ -86,6 +88,15 @@ type SearchParams = {
   commissionPaid?: string;
   commissionEmployee?: string;
   commissionStore?: string;
+  /** Onglet Produits → Prix : filtres & pagination (persistés dans l’URL) */
+  priceBrand?: string;
+  priceModel?: string;
+  priceCondition?: string;
+  priceMemory?: string;
+  priceMin?: string;
+  priceMax?: string;
+  pricePage?: string;
+  pricePageSize?: string;
 };
 
 type EmployeeRef = {
@@ -96,6 +107,7 @@ type EmployeeRef = {
 type StoreRef = {
   id: string;
   name: string;
+  petty_cash_opening_balance: number;
 };
 
 type AdminSection =
@@ -103,7 +115,8 @@ type AdminSection =
   | "referentiel"
   | "demandes"
   | "produits"
-  | "commissions";
+  | "commissions"
+  | "caisse";
 
 type Price = {
   id: string;
@@ -341,17 +354,69 @@ async function getEmployees(): Promise<EmployeeRef[]> {
 
 async function getStores(): Promise<StoreRef[]> {
   const supabase = createAdminClient();
-  const { data, error } = await supabase
+  let query = supabase
     .from("stores")
-    .select("id, name")
+    .select("id, name, petty_cash_opening_balance")
     .eq("is_active", true)
     .order("name", { ascending: true });
 
+  let { data, error } = await query;
+
+  if (error && /petty_cash_opening_balance|column.*does not exist/i.test(String(error.message))) {
+    const fb = await supabase
+      .from("stores")
+      .select("id, name")
+      .eq("is_active", true)
+      .order("name", { ascending: true });
+    if (fb.error) return [];
+    return (fb.data || []).map((r) => ({
+      id: r.id,
+      name: r.name,
+      petty_cash_opening_balance: 0,
+    }));
+  }
+
   if (error) return [];
-  return data || [];
+  return (data || []).map((r) => ({
+    id: r.id,
+    name: r.name,
+    petty_cash_opening_balance: Number(
+      (r as { petty_cash_opening_balance?: unknown }).petty_cash_opening_balance ?? 0,
+    ),
+  }));
 }
 
 const COMMISSIONS_DEFAULT_PAGE_SIZE = 20;
+
+const PRICES_PAGE_SIZES = new Set([10, 25, 50, 100, 250, 500, 1000]);
+
+function parseProductsPricesFilters(sp: SearchParams): ProductsPricesFiltersInit {
+  const brand =
+    typeof sp.priceBrand === "string" && sp.priceBrand !== "" ? sp.priceBrand : "all";
+  const model =
+    typeof sp.priceModel === "string" && sp.priceModel !== "" ? sp.priceModel : "all";
+  const condition =
+    typeof sp.priceCondition === "string" && sp.priceCondition !== ""
+      ? sp.priceCondition
+      : "all";
+  const memory =
+    typeof sp.priceMemory === "string" && sp.priceMemory !== "" ? sp.priceMemory : "all";
+  const min = typeof sp.priceMin === "string" ? sp.priceMin : "";
+  const max = typeof sp.priceMax === "string" ? sp.priceMax : "";
+  const page = Math.max(1, parseInt(sp.pricePage ?? "1", 10) || 1);
+  const pageSizeRaw = parseInt(sp.pricePageSize ?? "50", 10) || 50;
+  const pageSize = PRICES_PAGE_SIZES.has(pageSizeRaw) ? pageSizeRaw : 50;
+  return {
+    brand,
+    model,
+    condition,
+    memory,
+    min,
+    max,
+    pageIndex: page - 1,
+    pageSize,
+  };
+}
 
 type GetCommissionsParams = {
   page: number;
@@ -376,6 +441,10 @@ type CommissionsResult = {
   globalYearManagerCommissionTotal: number;
   globalYearOwnerCommissionTotal: number;
   globalYearCommissionTotal: number;
+  /** Année en cours, lignes dont la commission n’est pas marquée payée. */
+  globalYearOwnerToReceive: number;
+  globalYearOtherCommissionToReceive: number;
+  globalYearTotalToReceive: number;
   page: number;
   pageSize: number;
   fromDate: string;
@@ -384,6 +453,112 @@ type CommissionsResult = {
   employeeFullName: string;
   storeName: string;
 };
+
+const EMPTY_COMMISSION_REPORT_AGGREGATES: CommissionReportAggregates = {
+  totalUnits: 0,
+  totalBuyback: 0,
+  totalCommissionEmployee: 0,
+  totalCommissionManager: 0,
+  totalCommissionOwner: 0,
+  totalCommission: 0,
+  salesByMonth: [],
+  topModels: [],
+};
+
+async function getCommissionReportAggregates(
+  params: Omit<GetCommissionsParams, "page" | "pageSize">,
+): Promise<CommissionReportAggregates> {
+  const { createAdminClient } = await import("@/lib/supabase-server");
+  const supabase = createAdminClient();
+  const batchSize = 1000;
+  let totalUnits = 0;
+  let totalBuyback = 0;
+  let totalCommissionEmployee = 0;
+  let totalCommissionManager = 0;
+  let totalCommissionOwner = 0;
+  const monthMap = new Map<string, { units: number; buyback: number }>();
+  const modelMap = new Map<string, { units: number; buyback: number; commission: number }>();
+
+  try {
+    for (let p = 0; ; p += 1) {
+      const start = p * batchSize;
+      const end = start + batchSize - 1;
+      let q = supabase
+        .from("submissions")
+        .select(
+          "created_at,price,quantity,brand_name,model_name,commission_employee,commission_manager,commission_owner",
+        )
+        .order("created_at", { ascending: false })
+        .range(start, end);
+      q = applyCommissionFilters(q, {
+        fromDate: params.fromDate,
+        toDate: params.toDate,
+        commissionPaid: params.commissionPaid,
+        employeeFullName: params.employeeFullName,
+        storeName: params.storeName,
+      });
+      const { data, error } = await q;
+      if (error) {
+        return { ...EMPTY_COMMISSION_REPORT_AGGREGATES };
+      }
+      const batch = (data || []) as SubmissionRow[];
+      if (batch.length === 0) break;
+      for (const row of batch) {
+        const s = normalizeSubmissionRow(row);
+        const lineTotal = submissionLineTotal(s.price, s.quantity);
+        const ce = Number(s.commission_employee ?? 0);
+        const cm = Number(s.commission_manager ?? 0);
+        const co = Number(s.commission_owner ?? 0);
+        totalUnits += s.quantity;
+        totalBuyback += lineTotal;
+        totalCommissionEmployee += ce;
+        totalCommissionManager += cm;
+        totalCommissionOwner += co;
+        const d = new Date(s.created_at);
+        const monthKey = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+        const mm = monthMap.get(monthKey) ?? { units: 0, buyback: 0 };
+        mm.units += s.quantity;
+        mm.buyback += lineTotal;
+        monthMap.set(monthKey, mm);
+        const modelLabel =
+          [s.brand_name, s.model_name].filter(Boolean).join(" ").trim() || "—";
+        const mo = modelMap.get(modelLabel) ?? { units: 0, buyback: 0, commission: 0 };
+        mo.units += s.quantity;
+        mo.buyback += lineTotal;
+        mo.commission += ce + cm + co;
+        modelMap.set(modelLabel, mo);
+      }
+      if (batch.length < batchSize) break;
+    }
+  } catch {
+    return { ...EMPTY_COMMISSION_REPORT_AGGREGATES };
+  }
+
+  const salesByMonth = Array.from(monthMap.entries())
+    .map(([monthKey, v]) => ({
+      monthKey,
+      units: v.units,
+      buyback: v.buyback,
+    }))
+    .sort((a, b) => a.monthKey.localeCompare(b.monthKey));
+
+  const topModels = Array.from(modelMap.entries())
+    .map(([label, v]) => ({ label, ...v }))
+    .sort((a, b) => b.units - a.units)
+    .slice(0, 12);
+
+  return {
+    totalUnits,
+    totalBuyback,
+    totalCommissionEmployee,
+    totalCommissionManager,
+    totalCommissionOwner,
+    totalCommission:
+      totalCommissionEmployee + totalCommissionManager + totalCommissionOwner,
+    salesByMonth,
+    topModels,
+  };
+}
 
 async function getCommissionsPaginated(
   params: GetCommissionsParams,
@@ -431,6 +606,9 @@ async function getCommissionsPaginated(
             globalYearManagerCommissionTotal: 0,
             globalYearOwnerCommissionTotal: 0,
             globalYearCommissionTotal: 0,
+            globalYearOwnerToReceive: 0,
+            globalYearOtherCommissionToReceive: 0,
+            globalYearTotalToReceive: 0,
             page: params.page,
             pageSize: params.pageSize,
             fromDate: params.fromDate,
@@ -483,6 +661,9 @@ async function getCommissionsPaginated(
           globalYearManagerCommissionTotal: 0,
           globalYearOwnerCommissionTotal: 0,
           globalYearCommissionTotal: 0,
+          globalYearOwnerToReceive: 0,
+          globalYearOtherCommissionToReceive: 0,
+          globalYearTotalToReceive: 0,
           page: params.page,
           pageSize: params.pageSize,
           fromDate: params.fromDate,
@@ -535,6 +716,9 @@ async function getCommissionsPaginated(
         globalYearManagerCommissionTotal: 0,
         globalYearOwnerCommissionTotal: 0,
         globalYearCommissionTotal: 0,
+        globalYearOwnerToReceive: 0,
+        globalYearOtherCommissionToReceive: 0,
+        globalYearTotalToReceive: 0,
         page: params.page,
         pageSize: params.pageSize,
         fromDate: params.fromDate,
@@ -557,6 +741,9 @@ async function getCommissionsPaginated(
       globalYearManagerCommissionTotal: 0,
       globalYearOwnerCommissionTotal: 0,
       globalYearCommissionTotal: 0,
+      globalYearOwnerToReceive: 0,
+      globalYearOtherCommissionToReceive: 0,
+      globalYearTotalToReceive: 0,
       page: params.page,
       pageSize: params.pageSize,
       fromDate: params.fromDate,
@@ -608,6 +795,9 @@ async function getCommissionsPaginated(
   let globalYearManagerCommissionTotal = 0;
   let globalYearOwnerCommissionTotal = 0;
   let globalYearCommissionTotal = 0;
+  let globalYearOwnerToReceive = 0;
+  let globalYearOtherCommissionToReceive = 0;
+  let globalYearTotalToReceive = 0;
   try {
     let unpaidQuery = supabase
       .from("submissions")
@@ -693,6 +883,34 @@ async function getCommissionsPaginated(
     globalYearCommissionTotal = 0;
   }
 
+  try {
+    const year = new Date().getUTCFullYear();
+    const fromYear = `${year}-01-01T00:00:00.000Z`;
+    const toYear = `${year + 1}-01-01T00:00:00.000Z`;
+    const toReceiveResult = await supabase
+      .from("submissions")
+      .select("price, quantity, commission_employee, commission_manager, commission_owner")
+      .eq("commission_paid", false)
+      .gte("created_at", fromYear)
+      .lt("created_at", toYear);
+    if (!toReceiveResult.error && toReceiveResult.data) {
+      for (const row of toReceiveResult.data as SubmissionRow[]) {
+        const s = normalizeSubmissionRow(row);
+        const lineTotal = submissionLineTotal(s.price, s.quantity);
+        const emp = Number(s.commission_employee ?? 0);
+        const mgr = Number(s.commission_manager ?? 0);
+        const own = Number(s.commission_owner ?? 0);
+        globalYearOwnerToReceive += own;
+        globalYearOtherCommissionToReceive += emp + mgr;
+        globalYearTotalToReceive += lineTotal + emp + mgr + own;
+      }
+    }
+  } catch {
+    globalYearOwnerToReceive = 0;
+    globalYearOtherCommissionToReceive = 0;
+    globalYearTotalToReceive = 0;
+  }
+
   return {
     submissions,
     total: count ?? 0,
@@ -706,6 +924,9 @@ async function getCommissionsPaginated(
     globalYearManagerCommissionTotal,
     globalYearOwnerCommissionTotal,
     globalYearCommissionTotal,
+    globalYearOwnerToReceive,
+    globalYearOtherCommissionToReceive,
+    globalYearTotalToReceive,
     page: params.page,
     pageSize: params.pageSize,
     fromDate: params.fromDate,
@@ -736,7 +957,8 @@ export default async function AdminPage({
     sp.section === "referentiel" ||
     sp.section === "demandes" ||
     sp.section === "produits" ||
-    sp.section === "commissions"
+    sp.section === "commissions" ||
+    sp.section === "caisse"
       ? sp.section
       : "demandes";
 
@@ -749,6 +971,7 @@ export default async function AdminPage({
 
   const section = requestedSection;
   const tab = sp.tab === "brands" || sp.tab === "models" || sp.tab === "prices" ? sp.tab : "brands";
+  const initialProductsPricesFilters = parseProductsPricesFilters(sp);
   const selectedOrder = typeof sp.order === "string" && sp.order.trim() !== "" ? sp.order.trim() : null;
   const ordersPage = Math.max(1, parseInt(sp.ordersPage ?? "1", 10) || 1);
   const ordersPageSize = Math.min(
@@ -770,7 +993,7 @@ export default async function AdminPage({
   const commissionEmployee = sp.commissionEmployee ?? "";
   const commissionStore = sp.commissionStore ?? "";
 
-  const [submissions, adminUsers, brands, models, prices, employees, stores, commissionsData] =
+  const [submissions, adminUsers, brands, models, prices, employees, stores, commissionsPayload] =
     await Promise.all([
       getSubmissions(),
       admin.role === "super_admin" ? getAdminUsers() : Promise.resolve([] as AdminUser[]),
@@ -780,17 +1003,35 @@ export default async function AdminPage({
       getEmployees(),
       getStores(),
       section === "commissions"
-        ? getCommissionsPaginated({
-            page: commissionPage,
-            pageSize: commissionPageSize,
-            fromDate: commissionFrom,
-            toDate: commissionTo,
-            commissionPaid,
-            employeeFullName: commissionEmployee,
-            storeName: commissionStore,
-          })
-        : Promise.resolve(null),
+        ? Promise.all([
+            getCommissionsPaginated({
+              page: commissionPage,
+              pageSize: commissionPageSize,
+              fromDate: commissionFrom,
+              toDate: commissionTo,
+              commissionPaid,
+              employeeFullName: commissionEmployee,
+              storeName: commissionStore,
+            }),
+            getCommissionReportAggregates({
+              fromDate: commissionFrom,
+              toDate: commissionTo,
+              commissionPaid,
+              employeeFullName: commissionEmployee,
+              storeName: commissionStore,
+            }),
+          ]).then(([commissionsData, commissionReportAggregates]) => ({
+            commissionsData,
+            commissionReportAggregates,
+          }))
+        : Promise.resolve({
+            commissionsData: null as CommissionsResult | null,
+            commissionReportAggregates: null as CommissionReportAggregates | null,
+          }),
     ]);
+
+  const commissionsData = commissionsPayload.commissionsData;
+  const commissionReportAggregates = commissionsPayload.commissionReportAggregates;
 
   const ordersById = new Map<
     string,
@@ -893,6 +1134,8 @@ export default async function AdminPage({
       ? submissions.filter((s) => (s.request_group_id ?? s.id) === selectedOrder)
       : [];
 
+  const cashflowSnapshot = buildStoreCashflowSnapshot(submissions, stores);
+
   return (
     <AdminLayout
       submissions={submissions}
@@ -909,9 +1152,12 @@ export default async function AdminPage({
       prices={prices}
       initialSection={section}
       initialProductsTab={tab}
+      initialProductsPricesFilters={initialProductsPricesFilters}
       commissionsData={commissionsData}
+      commissionReportAggregates={commissionReportAggregates}
       employees={employees}
       stores={stores}
+      cashflowSnapshot={cashflowSnapshot}
       canManageStaffAccounts={admin.role === "super_admin"}
       viewerRole={admin.role}
     />

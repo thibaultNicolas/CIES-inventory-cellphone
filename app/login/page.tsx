@@ -6,6 +6,17 @@ import { motion } from "framer-motion";
 import { login } from "../actions/login";
 import { Lock } from "lucide-react";
 
+/** `redirect()` in a Server Action throws an error with this digest so Next can navigate. */
+function isNextRedirectError(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "digest" in error &&
+    typeof (error as { digest?: unknown }).digest === "string" &&
+    String((error as { digest: string }).digest).startsWith("NEXT_REDIRECT")
+  );
+}
+
 function LoginPageInner() {
   const searchParams = useSearchParams();
   const redirectTo = searchParams.get("redirect") || "/";
@@ -24,10 +35,13 @@ function LoginPageInner() {
       const result = await login(formData);
       if (result?.error) {
         setError(result.error);
-        setIsLoading(false);
       }
-    } catch {
+    } catch (err) {
+      if (isNextRedirectError(err)) {
+        throw err;
+      }
       setError("Une erreur s'est produite. Veuillez réessayer.");
+    } finally {
       setIsLoading(false);
     }
   }

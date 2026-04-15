@@ -2,8 +2,8 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Badge, type BadgeProps } from "@/components/ui/badge";
-import { ChevronDown, Trash2 } from "lucide-react";
+import type { AppRole } from "@/lib/app-role";
+import { hasMinRole } from "@/lib/app-role";
 import {
   Table,
   TableBody,
@@ -16,9 +16,6 @@ import { useI18n } from "@/contexts/I18nContext";
 import { deleteOrder } from "../../actions/delete-order";
 import { updateOrderStatus } from "../../actions/update-order-status";
 import type { SubmissionStatus } from "@/lib/submissions";
-import { motion, AnimatePresence } from "framer-motion";
-
-type BadgeVariant = NonNullable<BadgeProps["variant"]>;
 
 export type OrderSummary = {
   /** request_group_id when available, otherwise fallback to submission id */
@@ -40,12 +37,24 @@ export type OrderSummary = {
   commission_owner_total?: number | null;
 };
 
+const STATUS_LABEL_KEY: Record<
+  SubmissionStatus,
+  "statusUnprocessed" | "statusLabelSent" | "statusPaid" | "statusCancelled"
+> = {
+  unprocessed: "statusUnprocessed",
+  label_sent: "statusLabelSent",
+  paid: "statusPaid",
+  cancelled: "statusCancelled",
+};
+
 type OrdersTableProps = {
   orders: OrderSummary[];
   page: number;
   pageSize: number;
   total: number;
   totalPages: number;
+  viewerRole: AppRole;
+  canManagePaymentsAndCommissions: boolean;
 };
 
 type EditableOrderRow = OrderSummary & {
@@ -69,11 +78,14 @@ export function OrdersTable({
   pageSize,
   total,
   totalPages,
+  viewerRole,
+  canManagePaymentsAndCommissions,
 }: OrdersTableProps) {
   const { t, locale } = useI18n();
   const router = useRouter();
+  const canCancelOrder = hasMinRole(viewerRole, "admin");
+  const canDeleteOrder = viewerRole === "super_admin";
   const [deletingOrderId, setDeletingOrderId] = useState<string | null>(null);
-  const [openStatusDropdown, setOpenStatusDropdown] = useState<string | null>(null);
   const [ordersState, setOrdersState] = useState<EditableOrderRow[]>(
     orders.map((o) => ({
       ...o,
@@ -88,29 +100,15 @@ export function OrdersTable({
     return [...ordersState].sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
   }, [ordersState]);
 
+  /** Deux statuts principaux dans la liste ; « Annulé » n’apparaît que si la commande l’est déjà (réactivation via le détail si besoin). */
   const statusOptions = useMemo(
     () =>
       [
-        {
-          value: "unprocessed" as const,
-          label: t.admin.statusPendingPayment,
-          color: "unprocessed" as const,
-        },
-        { value: "paid" as const, label: t.admin.statusPaid, color: "paid" as const },
-        {
-          value: "cancelled" as const,
-          label: t.admin.statusCancelled,
-          color: "cancelled" as const,
-        },
-      ] satisfies ReadonlyArray<{ value: SubmissionStatus; label: string; color: BadgeVariant }>,
+        { value: "unprocessed" as const, label: t.admin.statusPendingPayment },
+        { value: "paid" as const, label: t.admin.statusPaid },
+      ] as const,
     [t.admin],
   );
-
-  const getStatusBadge = (status: SubmissionStatus) => {
-    const statusOption = statusOptions.find((s) => s.value === status);
-    if (!statusOption) return <Badge variant="unprocessed">{t.admin.statusPendingPayment}</Badge>;
-    return <Badge variant={statusOption.color}>{statusOption.label}</Badge>;
-  };
 
   const formatMoney = (amount: number) =>
     new Intl.NumberFormat(locale === "en" ? "en-CA" : "fr-CA", {
@@ -121,11 +119,21 @@ export function OrdersTable({
   const handleStatusChange = async (orderId: string, newStatus: SubmissionStatus) => {
     const result = await updateOrderStatus({ orderId, status: newStatus });
     if (!result.success) {
-      alert(result.error || t.admin.errorUpdateStatus);
+      alert(
+        result.error === "Forbidden"
+          ? t.admin.forbiddenFinancialAction
+          : result.error || t.admin.errorUpdateStatus,
+      );
       return;
     }
     setOrdersState((prev) => prev.map((o) => (o.orderId === orderId ? { ...o, status: newStatus } : o)));
-    setOpenStatusDropdown(null);
+  };
+
+  const handleMarkCancelled = async (orderId: string) => {
+    if (!canCancelOrder) return;
+    const ok = confirm(t.admin.orderMarkCancelledConfirm);
+    if (!ok) return;
+    await handleStatusChange(orderId, "cancelled");
   };
 
   const allSelected = sorted.length > 0 && selectedOrderIds.length === sorted.length;
@@ -162,7 +170,6 @@ export function OrdersTable({
       prev.map((o) => (selectedOrderIds.includes(o.orderId) ? { ...o, status: bulkStatus } : o)),
     );
     setSelectedOrderIds([]);
-    setOpenStatusDropdown(null);
   };
 
   const goToPage = (nextPage: number) => {
@@ -180,57 +187,62 @@ export function OrdersTable({
   };
 
   return (
-    <div className="w-full min-w-0 max-w-full overflow-hidden rounded-card border border-foreground/10 bg-background shadow-soft">
-      <div className="flex items-center justify-between gap-3 border-b border-foreground/10 px-3 py-3 sm:px-6">
-        <label className="inline-flex items-center gap-2 text-xs text-foreground/70 sm:text-sm">
-          <input
-            type="checkbox"
-            checked={allSelected}
-            onChange={toggleSelectAll}
-            className="h-4 w-4 rounded border-foreground/20"
-          />
-          {t.admin.selectAllOrders}
-        </label>
+    <div className="w-full min-w-0 max-w-full rounded-card border border-foreground/10 bg-background shadow-soft">
+      {canManagePaymentsAndCommissions ? (
+        <div className="flex items-center justify-between gap-3 border-b border-foreground/10 px-3 py-3 sm:px-6">
+          <label className="inline-flex items-center gap-2 text-xs text-foreground/70 sm:text-sm">
+            <input
+              type="checkbox"
+              checked={allSelected}
+              onChange={toggleSelectAll}
+              className="h-4 w-4 rounded border-foreground/20"
+            />
+            {t.admin.selectAllOrders}
+          </label>
 
-        <div className="flex items-center gap-2">
-          {selectedOrderIds.length > 0 ? (
-            <span className="text-xs text-foreground/60 sm:text-sm">
-              {selectedOrderIds.length} {t.admin.selectedOrders}
-            </span>
-          ) : null}
-          <select
-            value={bulkStatus}
-            onChange={(e) => setBulkStatus(e.target.value as SubmissionStatus)}
-            className="rounded-card border border-foreground/15 bg-background px-2 py-1 text-xs text-foreground sm:text-sm"
-          >
-            {statusOptions.map((status) => (
-              <option key={status.value} value={status.value}>
-                {status.label}
-              </option>
-            ))}
-          </select>
-          <button
-            type="button"
-            onClick={handleBulkStatusChange}
-            disabled={selectedOrderIds.length === 0 || isBulkUpdating}
-            className="rounded-card border border-brand-primary/30 bg-brand-primary/10 px-3 py-1.5 text-xs font-medium text-brand-primary disabled:cursor-not-allowed disabled:opacity-50 sm:text-sm"
-          >
-            {isBulkUpdating ? t.admin.save : t.admin.applyBulkStatus}
-          </button>
+          <div className="flex items-center gap-2">
+            {selectedOrderIds.length > 0 ? (
+              <span className="text-xs text-foreground/60 sm:text-sm">
+                {selectedOrderIds.length} {t.admin.selectedOrders}
+              </span>
+            ) : null}
+            <select
+              value={bulkStatus}
+              onChange={(e) => setBulkStatus(e.target.value as SubmissionStatus)}
+              className="rounded-card border border-foreground/15 bg-background px-2 py-1 text-xs text-foreground sm:text-sm"
+            >
+              {statusOptions.map((status) => (
+                <option key={status.value} value={status.value}>
+                  {status.label}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              onClick={handleBulkStatusChange}
+              disabled={selectedOrderIds.length === 0 || isBulkUpdating}
+              className="rounded-card border border-brand-primary/30 bg-brand-primary/10 px-3 py-1.5 text-xs font-medium text-brand-primary disabled:cursor-not-allowed disabled:opacity-50 sm:text-sm"
+            >
+              {isBulkUpdating ? t.admin.save : t.admin.applyBulkStatus}
+            </button>
+          </div>
         </div>
-      </div>
+      ) : null}
 
+      <div className="overflow-x-auto overflow-y-visible">
       <Table className="min-w-[1700px] whitespace-nowrap">
         <TableHeader>
           <TableRow>
             <TableHead className="w-10 px-3 sm:px-4">
-              <input
-                type="checkbox"
-                checked={allSelected}
-                onChange={toggleSelectAll}
-                className="h-4 w-4 rounded border-foreground/20"
-                aria-label={t.admin.selectAllOrders}
-              />
+              {canManagePaymentsAndCommissions ? (
+                <input
+                  type="checkbox"
+                  checked={allSelected}
+                  onChange={toggleSelectAll}
+                  className="h-4 w-4 rounded border-foreground/20"
+                  aria-label={t.admin.selectAllOrders}
+                />
+              ) : null}
             </TableHead>
             <TableHead className="px-3 sm:px-6">{t.admin.date}</TableHead>
             <TableHead className="px-3 sm:px-6">{t.admin.orderNumber}</TableHead>
@@ -259,13 +271,15 @@ export function OrdersTable({
                 className="hover:bg-foreground/5"
               >
                 <TableCell className="px-3 py-3 sm:px-4 sm:py-4" onClick={(e) => e.stopPropagation()}>
-                  <input
-                    type="checkbox"
-                    checked={selectedOrderIds.includes(order.orderId)}
-                    onChange={() => toggleSelectOrder(order.orderId)}
-                    className="h-4 w-4 rounded border-foreground/20"
-                    aria-label={`select-${order.orderId}`}
-                  />
+                  {canManagePaymentsAndCommissions ? (
+                    <input
+                      type="checkbox"
+                      checked={selectedOrderIds.includes(order.orderId)}
+                      onChange={() => toggleSelectOrder(order.orderId)}
+                      className="h-4 w-4 rounded border-foreground/20"
+                      aria-label={`select-${order.orderId}`}
+                    />
+                  ) : null}
                 </TableCell>
                 <TableCell className="whitespace-nowrap px-3 py-3 text-sm text-foreground/70 sm:px-6 sm:py-4">
                   {formatDate(order.created_at, locale)}
@@ -307,57 +321,45 @@ export function OrdersTable({
                       Number(order.commission_owner_total ?? 0),
                   )}
                 </TableCell>
-                <TableCell className="text-center px-3 py-3 sm:px-6 sm:py-4">
-                  <div className="relative inline-flex" onClick={(e) => e.stopPropagation()}>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setOpenStatusDropdown((prev) => (prev === order.orderId ? null : order.orderId))
+                <TableCell
+                  className="text-center px-3 py-3 sm:px-6 sm:py-4"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {canManagePaymentsAndCommissions ? (
+                    <select
+                      value={
+                        order.status === "cancelled"
+                          ? "cancelled"
+                          : order.status === "paid"
+                            ? "paid"
+                            : "unprocessed"
                       }
-                      className="inline-flex min-w-[170px] items-center justify-center gap-2 rounded-card border-2 border-transparent bg-[#F5F5F4] px-3 py-2 text-xs font-medium text-foreground transition-all duration-300 hover:border-brand-primary hover:bg-brand-primary/5"
-                      aria-haspopup="menu"
-                      aria-expanded={openStatusDropdown === order.orderId}
+                      onChange={(e) =>
+                        void handleStatusChange(
+                          order.orderId,
+                          e.target.value as SubmissionStatus,
+                        )
+                      }
+                      className="min-w-[180px] rounded-card border-2 border-transparent bg-[#F5F5F4] px-3 py-2 text-left text-xs font-medium text-foreground transition-all focus:border-brand-primary focus:bg-background focus:outline-none"
+                      aria-label={t.admin.status}
                     >
-                      {getStatusBadge(order.status)}
-                      <ChevronDown
-                        className={`h-3 w-3 transition-transform ${
-                          openStatusDropdown === order.orderId ? "rotate-180" : ""
-                        }`}
-                        aria-hidden
-                      />
-                    </button>
-
-                    <AnimatePresence>
-                      {openStatusDropdown === order.orderId && (
-                        <motion.div
-                          initial={{ opacity: 0, y: -10 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          exit={{ opacity: 0, y: -10 }}
-                          className="absolute left-1/2 top-full z-30 mt-2 w-52 -translate-x-1/2 rounded-card border border-foreground/10 bg-background p-2 shadow-soft"
-                          role="menu"
-                        >
-                          {statusOptions.map((status) => (
-                            <button
-                              key={status.value}
-                              type="button"
-                              onClick={() => handleStatusChange(order.orderId, status.value)}
-                              className={`w-full rounded-card px-3 py-2 text-left text-xs transition-all duration-300 ${
-                                order.status === status.value
-                                  ? "bg-brand-primary/10 text-brand-primary"
-                                  : "text-foreground hover:bg-foreground/5"
-                              }`}
-                              role="menuitem"
-                            >
-                              {status.label}
-                            </button>
-                          ))}
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
-                  </div>
+                      {statusOptions.map((status) => (
+                        <option key={status.value} value={status.value}>
+                          {status.label}
+                        </option>
+                      ))}
+                      {order.status === "cancelled" ? (
+                        <option value="cancelled">{t.admin.statusCancelled}</option>
+                      ) : null}
+                    </select>
+                  ) : (
+                    <span className="inline-block min-w-[140px] rounded-card border border-foreground/15 bg-[#F5F5F4] px-3 py-2 text-xs font-medium text-foreground">
+                      {t.admin[STATUS_LABEL_KEY[order.status]]}
+                    </span>
+                  )}
                 </TableCell>
                 <TableCell className="text-right px-3 py-3 sm:px-6 sm:py-4">
-                  <div className="inline-flex items-center justify-end gap-2">
+                  <div className="inline-flex flex-wrap items-center justify-end gap-2">
                     <button
                       type="button"
                       onClick={(e) => {
@@ -370,28 +372,41 @@ export function OrdersTable({
                     >
                       {t.admin.view}
                     </button>
-                    <button
-                      type="button"
-                      onClick={async (e) => {
-                        e.stopPropagation();
-                        const ok = confirm(t.admin.deleteOrderConfirm);
-                        if (!ok) return;
-                        setDeletingOrderId(order.orderId);
-                        const result = await deleteOrder(order.orderId);
-                        setDeletingOrderId(null);
-                        if (!result.success) {
-                          alert(result.error || t.admin.deleteError);
-                          return;
-                        }
-                        router.refresh();
-                      }}
-                      disabled={deletingOrderId === order.orderId}
-                      className="inline-flex h-9 w-9 items-center justify-center rounded-card border border-red-500/30 bg-red-500/5 text-red-700 transition-colors hover:bg-red-500/10 disabled:opacity-50"
-                      aria-label={t.admin.deleteOrder}
-                      title={t.admin.deleteOrder}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
+                    {canCancelOrder ? (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          void handleMarkCancelled(order.orderId);
+                        }}
+                        disabled={order.status === "cancelled"}
+                        className="inline-flex items-center justify-center rounded-card border-2 border-transparent bg-[#F5F5F4] px-4 py-2 text-xs font-medium text-foreground transition-all duration-300 hover:border-amber-500/50 hover:bg-amber-500/5 hover:scale-105 disabled:cursor-not-allowed disabled:opacity-45"
+                      >
+                        {t.admin.orderMarkCancelled}
+                      </button>
+                    ) : null}
+                    {canDeleteOrder ? (
+                      <button
+                        type="button"
+                        onClick={async (e) => {
+                          e.stopPropagation();
+                          const ok = confirm(t.admin.deleteOrderConfirm);
+                          if (!ok) return;
+                          setDeletingOrderId(order.orderId);
+                          const result = await deleteOrder(order.orderId);
+                          setDeletingOrderId(null);
+                          if (!result.success) {
+                            alert(result.error || t.admin.deleteError);
+                            return;
+                          }
+                          router.refresh();
+                        }}
+                        disabled={deletingOrderId === order.orderId}
+                        className="inline-flex items-center justify-center rounded-card border border-red-500/30 bg-red-500/5 px-4 py-2 text-xs font-medium text-red-700 transition-colors hover:bg-red-500/10 disabled:opacity-50"
+                      >
+                        {deletingOrderId === order.orderId ? "…" : t.admin.deleteOrder}
+                      </button>
+                    ) : null}
                   </div>
                 </TableCell>
               </TableRow>
@@ -399,6 +414,7 @@ export function OrdersTable({
           )}
         </TableBody>
       </Table>
+      </div>
       <div className="flex items-center justify-between border-t border-foreground/10 px-3 py-3 text-xs text-foreground/70 sm:px-6 sm:text-sm">
         <span>
           {total} {locale === "en" ? "orders" : "commandes"}

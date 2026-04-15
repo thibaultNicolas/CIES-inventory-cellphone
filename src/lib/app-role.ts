@@ -29,3 +29,8 @@ export function parseAppRole(
 export function hasMinRole(userRole: AppRole, minimum: AppRole): boolean {
   return ROLE_RANK[userRole] >= ROLE_RANK[minimum];
 }
+
+/** Prix, statuts de rachat (sauf annulation), commission payée, règles — réservé au super_admin. */
+export function canManagePaymentsAndCommissions(role: AppRole): boolean {
+  return role === "super_admin";
+}

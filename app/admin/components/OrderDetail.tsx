@@ -11,6 +11,8 @@ import { updateOrderStatus } from "../../actions/update-order-status";
 import { uploadShippingLabel } from "../actions/upload-shipping-label";
 import type { SubmissionStatus } from "@/lib/submissions";
 import { submissionLineTotal } from "@/lib/submissions";
+import type { AppRole } from "@/lib/app-role";
+import { hasMinRole } from "@/lib/app-role";
 
 export type OrderDetailSubmission = {
   id: string;
@@ -52,8 +54,9 @@ export type OrderDetailSubmission = {
 type OrderDetailProps = {
   orderId: string;
   submissions: OrderDetailSubmission[];
-  /** Basculer payé / non payé : super_admin uniquement. */
-  canManageCommissionPaid?: boolean;
+  /** Prix, statuts de rachat, commission payée : super_admin uniquement. */
+  canManagePaymentsAndCommissions?: boolean;
+  viewerRole: AppRole;
 };
 
 function formatDate(dateString: string, locale: string) {
@@ -93,10 +96,13 @@ const STATUS_LABEL_KEY: Record<
 export function OrderDetail({
   orderId,
   submissions,
-  canManageCommissionPaid = false,
+  canManagePaymentsAndCommissions = false,
+  viewerRole,
 }: OrderDetailProps) {
   const router = useRouter();
   const { t, locale } = useI18n();
+  const canCancelOrder = hasMinRole(viewerRole, "admin");
+  const canDeleteOrder = viewerRole === "super_admin";
   const [isWorking, setIsWorking] = useState<Record<string, boolean>>({});
   const [isUploadingLabel, setIsUploadingLabel] = useState(false);
   const [isLabelDragActive, setIsLabelDragActive] = useState(false);
@@ -243,10 +249,21 @@ export function OrderDetail({
     const result = await updateOrderStatus({ orderId, status: newStatus });
     setIsUpdatingOrderStatus(false);
     if (!result.success) {
-      alert(result.error || t.admin.errorUpdateStatus);
+      alert(
+        result.error === "Forbidden"
+          ? t.admin.forbiddenFinancialAction
+          : result.error || t.admin.errorUpdateStatus,
+      );
       return;
     }
     router.refresh();
+  }
+
+  async function handleMarkCancelled() {
+    if (!canCancelOrder) return;
+    const ok = confirm(t.admin.orderMarkCancelledConfirm);
+    if (!ok) return;
+    await handleOrderStatusChange("cancelled");
   }
 
   async function handleDeleteOrder() {
@@ -286,7 +303,11 @@ export function OrderDetail({
     setIsWorking((prev) => ({ ...prev, [submissionId]: false }));
 
     if (!result.success) {
-      alert(result.error || t.admin.priceUpdateError);
+      alert(
+        result.error === "Forbidden"
+          ? t.admin.forbiddenFinancialAction
+          : result.error || t.admin.priceUpdateError,
+      );
       return;
     }
 
@@ -320,29 +341,43 @@ export function OrderDetail({
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <select
-            value={summary.overallStatus}
-            disabled={isUpdatingOrderStatus}
-            onChange={(e) =>
-              void handleOrderStatusChange(e.target.value as SubmissionStatus)
-            }
-            className="rounded-card border border-foreground/10 bg-background px-3 py-2 text-xs text-foreground outline-none transition-colors focus:border-brand-primary disabled:opacity-60"
-            aria-label={t.admin.status}
-            title={t.admin.status}
-          >
-            <option value="unprocessed">{t.admin.statusUnprocessed}</option>
-            <option value="label_sent">{t.admin.statusLabelSent}</option>
-            <option value="paid">{t.admin.statusPaid}</option>
-            <option value="cancelled">{t.admin.statusCancelled}</option>
-          </select>
-          <button
-            type="button"
-            onClick={() => void handleDeleteOrder()}
-            disabled={isDeletingOrder}
-            className="inline-flex items-center justify-center rounded-full border border-red-500/30 bg-red-500/5 px-4 py-2 text-xs font-semibold uppercase tracking-[0.12em] text-red-700 transition-colors hover:bg-red-500/10 disabled:opacity-60"
-          >
-            {isDeletingOrder ? "…" : t.admin.deleteOrder}
-          </button>
+          {canManagePaymentsAndCommissions ? (
+            <select
+              value={summary.overallStatus}
+              disabled={isUpdatingOrderStatus}
+              onChange={(e) =>
+                void handleOrderStatusChange(e.target.value as SubmissionStatus)
+              }
+              className="rounded-card border border-foreground/10 bg-background px-3 py-2 text-xs text-foreground outline-none transition-colors focus:border-brand-primary disabled:opacity-60"
+              aria-label={t.admin.status}
+              title={t.admin.status}
+            >
+              <option value="unprocessed">{t.admin.statusUnprocessed}</option>
+              <option value="label_sent">{t.admin.statusLabelSent}</option>
+              <option value="paid">{t.admin.statusPaid}</option>
+              <option value="cancelled">{t.admin.statusCancelled}</option>
+            </select>
+          ) : null}
+          {canCancelOrder ? (
+            <button
+              type="button"
+              onClick={() => void handleMarkCancelled()}
+              disabled={isUpdatingOrderStatus || summary.overallStatus === "cancelled"}
+              className="inline-flex items-center justify-center rounded-card border-2 border-transparent bg-[#F5F5F4] px-4 py-2 text-xs font-medium text-foreground transition-all duration-300 hover:border-amber-500/50 hover:bg-amber-500/5 hover:scale-105 disabled:cursor-not-allowed disabled:opacity-45"
+            >
+              {t.admin.orderMarkCancelled}
+            </button>
+          ) : null}
+          {canDeleteOrder ? (
+            <button
+              type="button"
+              onClick={() => void handleDeleteOrder()}
+              disabled={isDeletingOrder}
+              className="inline-flex items-center justify-center rounded-full border border-red-500/30 bg-red-500/5 px-4 py-2 text-xs font-semibold uppercase tracking-[0.12em] text-red-700 transition-colors hover:bg-red-500/10 disabled:opacity-60"
+            >
+              {isDeletingOrder ? "…" : t.admin.deleteOrder}
+            </button>
+          ) : null}
           <div className="rounded-card border border-foreground/10 bg-background px-4 py-2 text-xs text-foreground/70">
             {summary.orderUnitsTotal}{" "}
             {summary.orderUnitsTotal > 1 ? t.admin.itemsPlural : t.admin.items}
@@ -391,20 +426,22 @@ export function OrderDetail({
                             ).toFixed(2)}
                             $
                           </span>
-                          <button
-                            type="button"
-                            disabled={isWorking[s.id]}
-                            onClick={() =>
-                              setPriceEditor({
-                                submissionId: s.id,
-                                price: String(s.price.toFixed(2)),
-                                reason: s.price_override_reason ?? "",
-                              })
-                            }
-                            className="rounded-full border border-foreground/15 bg-foreground/5 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-foreground/80 transition-all hover:bg-foreground/10 hover:scale-[1.02] disabled:opacity-60"
-                          >
-                            {t.admin.editPrice}
-                          </button>
+                          {canManagePaymentsAndCommissions ? (
+                            <button
+                              type="button"
+                              disabled={isWorking[s.id]}
+                              onClick={() =>
+                                setPriceEditor({
+                                  submissionId: s.id,
+                                  price: String(s.price.toFixed(2)),
+                                  reason: s.price_override_reason ?? "",
+                                })
+                              }
+                              className="rounded-full border border-foreground/15 bg-foreground/5 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-foreground/80 transition-all hover:bg-foreground/10 hover:scale-[1.02] disabled:opacity-60"
+                            >
+                              {t.admin.editPrice}
+                            </button>
+                          ) : null}
                         </div>
                       </div>
                       {s.price_override_reason ? (
@@ -424,7 +461,7 @@ export function OrderDetail({
                     </div>
 
                     <div className="flex flex-wrap items-center gap-2">
-                      {canManageCommissionPaid ? (
+                      {canManagePaymentsAndCommissions ? (
                         <button
                           type="button"
                           disabled={isWorking[s.id]}

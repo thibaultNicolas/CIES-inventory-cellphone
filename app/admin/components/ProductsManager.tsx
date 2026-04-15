@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   Table,
@@ -63,10 +63,39 @@ type ProductsManagerProps = {
   initialModels: Model[];
   initialPrices: Price[];
   initialTab?: "brands" | "models" | "prices";
+  initialPricesFilters?: Partial<ProductsPricesFiltersInit>;
 };
 
 const CONDITIONS = ["Comme neuf", "Bon", "Acceptable", "Rayé"];
 const MEMORIES = ["64GB", "128GB", "256GB", "512GB", "1TB"];
+
+export type ProductsPricesFiltersInit = {
+  brand: string;
+  model: string;
+  condition: string;
+  memory: string;
+  min: string;
+  max: string;
+  pageIndex: number;
+  pageSize: number;
+};
+
+const DEFAULT_PRICES_FILTERS: ProductsPricesFiltersInit = {
+  brand: "all",
+  model: "all",
+  condition: "all",
+  memory: "all",
+  min: "",
+  max: "",
+  pageIndex: 0,
+  pageSize: 50,
+};
+
+function mergePricesFilters(
+  initial?: Partial<ProductsPricesFiltersInit>,
+): ProductsPricesFiltersInit {
+  return { ...DEFAULT_PRICES_FILTERS, ...initial };
+}
 
 type BulkPriceAdjustmentKind = "percent" | "amount";
 type BulkPriceAdjustmentDirection = "increase" | "decrease";
@@ -84,11 +113,13 @@ export function ProductsManager({
   initialModels,
   initialPrices,
   initialTab = "brands",
+  initialPricesFilters,
 }: ProductsManagerProps) {
   const router = useRouter();
+  const initialPf = mergePricesFilters(initialPricesFilters);
   const [brands] = useState(initialBrands);
   const [models] = useState(initialModels);
-  const [prices] = useState(initialPrices);
+  const [prices, setPrices] = useState(initialPrices);
   const [activeTab, setActiveTab] = useState<"brands" | "models" | "prices">(initialTab);
   const [editingBrand, setEditingBrand] = useState<string | null>(null);
   const [editingModel, setEditingModel] = useState<string | null>(null);
@@ -101,14 +132,15 @@ export function ProductsManager({
   // Keep image URLs in React state so preview doesn't disappear
   const [newBrandLogoUrl, setNewBrandLogoUrl] = useState<string | null>(null);
   const [brandLogoDrafts, setBrandLogoDrafts] = useState<Record<string, string | null>>({});
-  const [selectedBrandFilter, setSelectedBrandFilter] = useState<string>("all");
-  const [selectedModelFilter, setSelectedModelFilter] = useState<string>("all");
-  const [selectedConditionFilter, setSelectedConditionFilter] = useState<string>("all");
-  const [selectedMemoryFilter, setSelectedMemoryFilter] = useState<string>("all");
-  const [minPrice, setMinPrice] = useState<string>("");
-  const [maxPrice, setMaxPrice] = useState<string>("");
-  const [pricesPageSize, setPricesPageSize] = useState<number>(50);
-  const [pricesPageIndex, setPricesPageIndex] = useState<number>(0);
+  const [selectedBrandFilter, setSelectedBrandFilter] = useState<string>(initialPf.brand);
+  const [selectedModelFilter, setSelectedModelFilter] = useState<string>(initialPf.model);
+  const [selectedConditionFilter, setSelectedConditionFilter] =
+    useState<string>(initialPf.condition);
+  const [selectedMemoryFilter, setSelectedMemoryFilter] = useState<string>(initialPf.memory);
+  const [minPrice, setMinPrice] = useState<string>(initialPf.min);
+  const [maxPrice, setMaxPrice] = useState<string>(initialPf.max);
+  const [pricesPageSize, setPricesPageSize] = useState<number>(initialPf.pageSize);
+  const [pricesPageIndex, setPricesPageIndex] = useState<number>(initialPf.pageIndex);
   const [bulkAdjustKind, setBulkAdjustKind] = useState<BulkPriceAdjustmentKind>("percent");
   const [bulkAdjustDirection, setBulkAdjustDirection] =
     useState<BulkPriceAdjustmentDirection>("increase");
@@ -117,6 +149,58 @@ export function ProductsManager({
   const [bulkPreviewSnapshot, setBulkPreviewSnapshot] = useState<BulkPricePreview | null>(null);
   const [bulkPreviewKey, setBulkPreviewKey] = useState<string | null>(null);
   const [bulkConfirmChecked, setBulkConfirmChecked] = useState(false);
+  const [selectedPriceIds, setSelectedPriceIds] = useState<Set<string>>(() => new Set());
+  const [bulkDialogOpen, setBulkDialogOpen] = useState(false);
+  const pageSelectAllRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    setPrices(initialPrices);
+  }, [initialPrices]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || activeTab !== "prices") return;
+
+    const url = new URL(window.location.href);
+    const setOrDelete = (key: string, value: string, omitWhen: string) => {
+      if (!value || value === omitWhen) url.searchParams.delete(key);
+      else url.searchParams.set(key, value);
+    };
+
+    setOrDelete("priceBrand", selectedBrandFilter, "all");
+    setOrDelete("priceModel", selectedModelFilter, "all");
+    setOrDelete("priceCondition", selectedConditionFilter, "all");
+    setOrDelete("priceMemory", selectedMemoryFilter, "all");
+    setOrDelete("priceMin", minPrice.trim(), "");
+    setOrDelete("priceMax", maxPrice.trim(), "");
+
+    const page = pricesPageIndex + 1;
+    if (page <= 1) url.searchParams.delete("pricePage");
+    else url.searchParams.set("pricePage", String(page));
+
+    if (pricesPageSize === DEFAULT_PRICES_FILTERS.pageSize) {
+      url.searchParams.delete("pricePageSize");
+    } else {
+      url.searchParams.set("pricePageSize", String(pricesPageSize));
+    }
+
+    const nextSearch = url.searchParams.toString();
+    const next = url.pathname + (nextSearch ? `?${nextSearch}` : "");
+    const current = window.location.pathname + window.location.search;
+    if (next !== current) {
+      router.replace(next, { scroll: false });
+    }
+  }, [
+    activeTab,
+    selectedBrandFilter,
+    selectedModelFilter,
+    selectedConditionFilter,
+    selectedMemoryFilter,
+    minPrice,
+    maxPrice,
+    pricesPageIndex,
+    pricesPageSize,
+    router,
+  ]);
 
   const handleCreateBrand = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -211,7 +295,8 @@ export function ProductsManager({
 
     const result = await createPrice(modelId, condition, memory, price);
     if (result.success) {
-      window.location.reload();
+      setShowPriceForm(false);
+      router.refresh();
     } else {
       alert(result.error);
     }
@@ -226,7 +311,8 @@ export function ProductsManager({
 
     const result = await updatePrice(id, condition, memory, price);
     if (result.success) {
-      window.location.reload();
+      setEditingPrice(null);
+      router.refresh();
     } else {
       alert(result.error);
     }
@@ -236,7 +322,7 @@ export function ProductsManager({
     if (!confirm("Êtes-vous sûr de vouloir supprimer ce prix ?")) return;
     const result = await deletePrice(id);
     if (result.success) {
-      window.location.reload();
+      router.refresh();
     } else {
       alert(result.error);
     }
@@ -266,7 +352,8 @@ export function ProductsManager({
 
     const result = await updatePrice(priceId, price.condition, price.memory, newPrice);
     if (result.success) {
-      window.location.reload();
+      setEditingPriceInline(null);
+      router.refresh();
     } else {
       alert(result.error);
       setEditingPriceInline(null);
@@ -368,6 +455,31 @@ export function ProductsManager({
   ]);
 
   useEffect(() => {
+    const allowed = new Set(filteredPrices.map((p) => p.id));
+    setSelectedPriceIds((prev) => {
+      const next = new Set<string>();
+      for (const id of prev) {
+        if (allowed.has(id)) next.add(id);
+      }
+      if (next.size === prev.size) {
+        for (const id of prev) {
+          if (!next.has(id)) return next;
+        }
+        return prev;
+      }
+      return next;
+    });
+  }, [filteredPrices]);
+
+  const bulkScopePrices = useMemo(() => {
+    return filteredPrices.filter((p) => selectedPriceIds.has(p.id));
+  }, [filteredPrices, selectedPriceIds]);
+
+  const selectedPriceIdsKey = useMemo(() => {
+    return [...selectedPriceIds].sort().join(",");
+  }, [selectedPriceIds]);
+
+  useEffect(() => {
     // Reset to first page whenever filters change.
     setPricesPageIndex(0);
   }, [
@@ -405,6 +517,20 @@ export function ProductsManager({
     return `${start}–${end}`;
   }, [filteredPrices.length, pricesPageIndex, pricesPageSize]);
 
+  const selectedOnPageCount = useMemo(() => {
+    return pagedPrices.filter((p) => selectedPriceIds.has(p.id)).length;
+  }, [pagedPrices, selectedPriceIds]);
+
+  const allPageSelected =
+    pagedPrices.length > 0 && selectedOnPageCount === pagedPrices.length;
+
+  useEffect(() => {
+    const el = pageSelectAllRef.current;
+    if (!el) return;
+    el.indeterminate =
+      selectedOnPageCount > 0 && selectedOnPageCount < pagedPrices.length;
+  }, [selectedOnPageCount, pagedPrices.length]);
+
   const bulkPricePreview = useMemo(() => {
     const value = parseFloat(bulkAdjustValue);
     const hasValidValue = Number.isFinite(value) && value > 0;
@@ -413,9 +539,9 @@ export function ProductsManager({
 
     if (!hasValidValue) {
       return {
-        total: filteredPrices.length,
+        total: bulkScopePrices.length,
         affected: 0,
-        unchanged: filteredPrices.length,
+        unchanged: bulkScopePrices.length,
         updates: [] as Array<{ id: string; model_id: string; condition: string; memory: string; price: number }>,
         sample: [] as Array<{ id: string; label: string; from: number; to: number }>,
       };
@@ -424,7 +550,7 @@ export function ProductsManager({
     const updates: Array<{ id: string; model_id: string; condition: string; memory: string; price: number }> = [];
     const sample: Array<{ id: string; label: string; from: number; to: number }> = [];
 
-    for (const p of filteredPrices) {
+    for (const p of bulkScopePrices) {
       const base = Number(p.price);
       if (!Number.isFinite(base)) continue;
 
@@ -451,37 +577,22 @@ export function ProductsManager({
     }
 
     return {
-      total: filteredPrices.length,
+      total: bulkScopePrices.length,
       affected: updates.length,
-      unchanged: filteredPrices.length - updates.length,
+      unchanged: bulkScopePrices.length - updates.length,
       updates,
       sample,
     };
-  }, [filteredPrices, bulkAdjustKind, bulkAdjustDirection, bulkAdjustValue]);
+  }, [bulkScopePrices, bulkAdjustKind, bulkAdjustDirection, bulkAdjustValue]);
 
   const bulkDraftKey = useMemo(() => {
     return [
       bulkAdjustKind,
       bulkAdjustDirection,
       bulkAdjustValue.trim(),
-      selectedBrandFilter,
-      selectedModelFilter,
-      selectedConditionFilter,
-      selectedMemoryFilter,
-      minPrice.trim(),
-      maxPrice.trim(),
+      selectedPriceIdsKey,
     ].join("|");
-  }, [
-    bulkAdjustKind,
-    bulkAdjustDirection,
-    bulkAdjustValue,
-    selectedBrandFilter,
-    selectedModelFilter,
-    selectedConditionFilter,
-    selectedMemoryFilter,
-    minPrice,
-    maxPrice,
-  ]);
+  }, [bulkAdjustKind, bulkAdjustDirection, bulkAdjustValue, selectedPriceIdsKey]);
 
   const isBulkPreviewStale = bulkPreviewKey !== null && bulkPreviewKey !== bulkDraftKey;
 
@@ -510,6 +621,16 @@ export function ProductsManager({
     setBulkConfirmChecked(false);
   };
 
+  const openBulkDialog = () => {
+    clearBulkPricePreview();
+    setBulkDialogOpen(true);
+  };
+
+  const closeBulkDialog = () => {
+    setBulkDialogOpen(false);
+    clearBulkPricePreview();
+  };
+
   const applyBulkPriceRule = async () => {
     if (isApplyingBulkPrices) return;
     if (!bulkPreviewSnapshot || !bulkPreviewKey) return;
@@ -521,7 +642,7 @@ export function ProductsManager({
     const verb = bulkAdjustDirection === "increase" ? "augmenter" : "diminuer";
 
     const ok = confirm(
-      `Confirmer: ${verb} de ${value}${unit} sur ${bulkPreviewSnapshot.affected} prix (selon les filtres actuels) ?`
+      `Confirmer: ${verb} de ${value}${unit} sur ${bulkPreviewSnapshot.affected} prix sélectionné(s) ?`
     );
     if (!ok) return;
 
@@ -529,7 +650,8 @@ export function ProductsManager({
     try {
       const result = await updatePricesBulk(bulkPreviewSnapshot.updates);
       if (result.success) {
-        window.location.reload();
+        closeBulkDialog();
+        router.refresh();
       } else {
         alert(result.error);
       }
@@ -1101,149 +1223,43 @@ export function ProductsManager({
             </div>
           </div>
 
-          <div className="rounded-card border border-foreground/10 bg-background p-4 shadow-soft">
-            <div className="flex flex-wrap items-start justify-between gap-4">
-              <div>
-                <div className="text-sm font-medium text-foreground/70">Règle de prix en gros</div>
-                <div className="text-xs text-foreground/50">
-                  S&apos;applique à la liste filtrée ci-dessus.
-                </div>
-              </div>
-
-              <div className="flex flex-wrap gap-3">
-                <select
-                  value={bulkAdjustKind}
-                  onChange={(e) => setBulkAdjustKind(e.target.value as BulkPriceAdjustmentKind)}
-                  className="rounded-card border-2 border-transparent bg-[#F5F5F4] px-4 py-2 text-sm text-foreground transition-all focus:border-brand-primary focus:bg-background focus:outline-none"
-                >
-                  <option value="percent">Pourcentage (%)</option>
-                  <option value="amount">Montant ($)</option>
-                </select>
-
-                <select
-                  value={bulkAdjustDirection}
-                  onChange={(e) =>
-                    setBulkAdjustDirection(e.target.value as BulkPriceAdjustmentDirection)
-                  }
-                  className="rounded-card border-2 border-transparent bg-[#F5F5F4] px-4 py-2 text-sm text-foreground transition-all focus:border-brand-primary focus:bg-background focus:outline-none"
-                >
-                  <option value="increase">Augmenter</option>
-                  <option value="decrease">Diminuer</option>
-                </select>
-
-                <input
-                  type="number"
-                  inputMode="decimal"
-                  min="0"
-                  step="0.01"
-                  placeholder={bulkAdjustKind === "percent" ? "Ex: 5" : "Ex: 25"}
-                  value={bulkAdjustValue}
-                  onChange={(e) => setBulkAdjustValue(e.target.value)}
-                  className="w-32 rounded-card border-2 border-transparent bg-[#F5F5F4] px-4 py-2 text-sm text-foreground transition-all placeholder:text-foreground/40 focus:border-brand-primary focus:bg-background focus:outline-none"
-                />
-
-                <button
-                  type="button"
-                  onClick={generateBulkPricePreview}
-                  disabled={
-                    isApplyingBulkPrices ||
-                    bulkPricePreview.affected === 0 ||
-                    !bulkAdjustValue ||
-                    parseFloat(bulkAdjustValue) <= 0
-                  }
-                  className="rounded-full border border-brand-dark bg-background px-6 py-2 text-sm font-medium uppercase tracking-[0.15em] text-brand-dark shadow-soft transition-all duration-300 hover:bg-brand-dark hover:text-background hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
-                >
-                  Prévisualiser ({bulkPricePreview.affected})
-                </button>
-
-                <button
-                  type="button"
-                  onClick={applyBulkPriceRule}
-                  disabled={
-                    isApplyingBulkPrices ||
-                    !bulkPreviewSnapshot ||
-                    isBulkPreviewStale ||
-                    !bulkConfirmChecked ||
-                    bulkPreviewSnapshot.affected === 0
-                  }
-                  className="rounded-full bg-brand-dark px-6 py-2 text-sm font-medium uppercase tracking-[0.15em] text-background shadow-lg transition-all duration-300 hover:bg-brand-primary hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
-                >
-                  {isApplyingBulkPrices
-                    ? "Application..."
-                    : `Confirmer et appliquer (${bulkPreviewSnapshot?.affected ?? 0})`}
-                </button>
-
-                {bulkPreviewSnapshot && (
-                  <button
-                    type="button"
-                    onClick={clearBulkPricePreview}
-                    className="rounded-full border border-foreground/10 bg-background px-6 py-2 text-sm font-medium uppercase tracking-[0.15em] text-foreground/70 transition-all hover:bg-foreground/5"
-                  >
-                    Réinitialiser
-                  </button>
-                )}
-              </div>
+          <div className="flex flex-col gap-3 rounded-card border border-foreground/10 bg-background p-3 shadow-soft sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:p-4">
+            <p className="text-sm text-foreground/70">
+              <span className="font-medium text-foreground">{selectedPriceIds.size}</span>{" "}
+              sélectionné{selectedPriceIds.size !== 1 ? "s" : ""}
+              {filteredPrices.length > 0 ? (
+                <span className="text-foreground/50">
+                  {" "}
+                  · {filteredPrices.length} après filtres
+                </span>
+              ) : null}
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => setSelectedPriceIds(new Set(filteredPrices.map((p) => p.id)))}
+                disabled={filteredPrices.length === 0}
+                className="rounded-full border border-foreground/10 bg-background px-4 py-2 text-xs font-medium uppercase tracking-[0.12em] text-foreground/70 transition-all hover:bg-foreground/5 disabled:cursor-not-allowed disabled:opacity-50 sm:text-sm"
+              >
+                Tout sélectionner (filtrés)
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectedPriceIds(new Set())}
+                disabled={selectedPriceIds.size === 0}
+                className="rounded-full border border-foreground/10 bg-background px-4 py-2 text-xs font-medium uppercase tracking-[0.12em] text-foreground/70 transition-all hover:bg-foreground/5 disabled:cursor-not-allowed disabled:opacity-50 sm:text-sm"
+              >
+                Tout désélectionner
+              </button>
+              <button
+                type="button"
+                onClick={openBulkDialog}
+                disabled={selectedPriceIds.size === 0}
+                className="rounded-full bg-brand-dark px-5 py-2 text-xs font-medium uppercase tracking-[0.12em] text-background shadow-lg transition-all duration-300 hover:bg-brand-primary hover:scale-105 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:scale-100 sm:text-sm"
+              >
+                Modifier les prix
+              </button>
             </div>
-
-            <div className="mt-3 text-xs text-foreground/60">
-              {bulkPricePreview.total === 0 ? (
-                "Aucun prix dans la liste filtrée."
-              ) : (
-                <>
-                  Impact estimé (avant prévisualisation): {bulkPricePreview.affected} modifié(s),{" "}
-                  {bulkPricePreview.unchanged} inchangé(s)
-                </>
-              )}
-            </div>
-
-            {bulkPreviewSnapshot && (
-              <div className="mt-4 rounded-card border border-foreground/10 bg-secondary/40 p-4">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div className="text-sm text-foreground/70">
-                    Aperçu figé: <span className="font-medium">{bulkPreviewSnapshot.affected}</span>{" "}
-                    modification(s)
-                    {isBulkPreviewStale && (
-                      <span className="ml-2 font-medium text-red-600">
-                        (aperçu expiré — re-prévisualisez)
-                      </span>
-                    )}
-                  </div>
-                </div>
-
-                {bulkPreviewSnapshot.sample.length > 0 && (
-                  <div className="mt-3 space-y-1 text-xs text-foreground/70">
-                    {bulkPreviewSnapshot.sample.map((s) => (
-                      <div key={s.id} className="flex flex-wrap items-center gap-2">
-                        <span>{s.label}</span>
-                        <span className="text-foreground/40">—</span>
-                        <span className="font-medium">
-                          {s.from.toFixed(2)}$ → {s.to.toFixed(2)}$
-                        </span>
-                      </div>
-                    ))}
-                    {bulkPreviewSnapshot.affected > bulkPreviewSnapshot.sample.length && (
-                      <div className="mt-2 text-foreground/50">
-                        … et {bulkPreviewSnapshot.affected - bulkPreviewSnapshot.sample.length} autre(s)
-                        modification(s).
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                <label className="mt-4 flex items-start gap-3">
-                  <input
-                    type="checkbox"
-                    checked={bulkConfirmChecked}
-                    disabled={isBulkPreviewStale}
-                    onChange={(e) => setBulkConfirmChecked(e.target.checked)}
-                    className="mt-0.5 h-4 w-4"
-                  />
-                  <span className="text-sm text-foreground/70">
-                    Je confirme appliquer ces changements aux prix prévisualisés.
-                  </span>
-                </label>
-              </div>
-            )}
           </div>
 
           <AnimatePresence>
@@ -1346,6 +1362,30 @@ export function ProductsManager({
             <Table className="min-w-[600px]">
               <TableHeader>
                 <TableRow>
+                  <TableHead className="w-12 px-2 sm:px-3">
+                    <input
+                      ref={pageSelectAllRef}
+                      type="checkbox"
+                      checked={allPageSelected}
+                      onChange={() => {
+                        setSelectedPriceIds((prev) => {
+                          const next = new Set(prev);
+                          const every =
+                            pagedPrices.length > 0 &&
+                            pagedPrices.every((p) => next.has(p.id));
+                          if (every) {
+                            pagedPrices.forEach((p) => next.delete(p.id));
+                          } else {
+                            pagedPrices.forEach((p) => next.add(p.id));
+                          }
+                          return next;
+                        });
+                      }}
+                      disabled={pagedPrices.length === 0}
+                      className="h-4 w-4 rounded border-foreground/30"
+                      aria-label="Sélectionner tous les prix de cette page"
+                    />
+                  </TableHead>
                   <TableHead className="px-3 sm:px-6">Modèle</TableHead>
                   <TableHead className="px-3 sm:px-6">Condition</TableHead>
                   <TableHead className="px-3 sm:px-6">Mémoire</TableHead>
@@ -1356,7 +1396,7 @@ export function ProductsManager({
               <TableBody>
                 {filteredPrices.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={5} className="text-center text-foreground/60">
+                    <TableCell colSpan={6} className="text-center text-foreground/60">
                       {prices.length === 0 ? "Aucun prix" : "Aucun prix ne correspond aux filtres"}
                     </TableCell>
                   </TableRow>
@@ -1364,7 +1404,7 @@ export function ProductsManager({
                   pagedPrices.map((price) =>
                     editingPrice === price.id ? (
                       <TableRow key={price.id}>
-                        <TableCell colSpan={5}>
+                        <TableCell colSpan={6}>
                           <form
                             onSubmit={(e) => handleUpdatePrice(price.id, e)}
                             className="flex items-center gap-4"
@@ -1420,6 +1460,22 @@ export function ProductsManager({
                       </TableRow>
                     ) : (
                       <TableRow key={price.id}>
+                        <TableCell className="w-12 px-2 sm:px-3">
+                          <input
+                            type="checkbox"
+                            checked={selectedPriceIds.has(price.id)}
+                            onChange={() => {
+                              setSelectedPriceIds((prev) => {
+                                const next = new Set(prev);
+                                if (next.has(price.id)) next.delete(price.id);
+                                else next.add(price.id);
+                                return next;
+                              });
+                            }}
+                            className="h-4 w-4 rounded border-foreground/30"
+                            aria-label={`Sélectionner ${getBrandName(price.models.brands)} ${price.models.name}`}
+                          />
+                        </TableCell>
                         <TableCell>
                           {getBrandName(price.models.brands)} {price.models.name}
                         </TableCell>
@@ -1470,6 +1526,181 @@ export function ProductsManager({
               </TableBody>
             </Table>
           </div>
+
+          {bulkDialogOpen ? (
+            <div
+              className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+              role="presentation"
+              onClick={closeBulkDialog}
+            >
+              <div
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="bulk-prices-dialog-title"
+                className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-card border border-foreground/10 bg-background p-5 shadow-xl sm:p-6"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="flex flex-wrap items-start justify-between gap-4">
+                  <div>
+                    <h3
+                      id="bulk-prices-dialog-title"
+                      className="font-(family-name:--font-playfair) text-lg font-light text-brand-dark sm:text-xl"
+                    >
+                      Règle de prix en gros
+                    </h3>
+                    <p className="mt-1 text-xs text-foreground/50">
+                      S&apos;applique uniquement aux{" "}
+                      <span className="font-medium text-foreground/70">{bulkScopePrices.length}</span>{" "}
+                      prix sélectionné{bulkScopePrices.length !== 1 ? "s" : ""} (liste filtrée).
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={closeBulkDialog}
+                    className="rounded-card p-2 text-foreground/60 transition-all hover:bg-foreground/5 hover:text-foreground"
+                    aria-label="Fermer"
+                  >
+                    <X className="h-5 w-5" />
+                  </button>
+                </div>
+
+                <div className="mt-5 flex flex-wrap gap-3">
+                  <select
+                    value={bulkAdjustKind}
+                    onChange={(e) => setBulkAdjustKind(e.target.value as BulkPriceAdjustmentKind)}
+                    className="rounded-card border-2 border-transparent bg-[#F5F5F4] px-4 py-2 text-sm text-foreground transition-all focus:border-brand-primary focus:bg-background focus:outline-none"
+                  >
+                    <option value="percent">Pourcentage (%)</option>
+                    <option value="amount">Montant ($)</option>
+                  </select>
+
+                  <select
+                    value={bulkAdjustDirection}
+                    onChange={(e) =>
+                      setBulkAdjustDirection(e.target.value as BulkPriceAdjustmentDirection)
+                    }
+                    className="rounded-card border-2 border-transparent bg-[#F5F5F4] px-4 py-2 text-sm text-foreground transition-all focus:border-brand-primary focus:bg-background focus:outline-none"
+                  >
+                    <option value="increase">Augmenter</option>
+                    <option value="decrease">Diminuer</option>
+                  </select>
+
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    min="0"
+                    step="0.01"
+                    placeholder={bulkAdjustKind === "percent" ? "Ex: 5" : "Ex: 25"}
+                    value={bulkAdjustValue}
+                    onChange={(e) => setBulkAdjustValue(e.target.value)}
+                    className="w-32 rounded-card border-2 border-transparent bg-[#F5F5F4] px-4 py-2 text-sm text-foreground transition-all placeholder:text-foreground/40 focus:border-brand-primary focus:bg-background focus:outline-none"
+                  />
+
+                  <button
+                    type="button"
+                    onClick={generateBulkPricePreview}
+                    disabled={
+                      isApplyingBulkPrices ||
+                      bulkPricePreview.affected === 0 ||
+                      !bulkAdjustValue ||
+                      parseFloat(bulkAdjustValue) <= 0
+                    }
+                    className="rounded-full border border-brand-dark bg-background px-6 py-2 text-sm font-medium uppercase tracking-[0.15em] text-brand-dark shadow-soft transition-all duration-300 hover:bg-brand-dark hover:text-background hover:scale-105 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:scale-100"
+                  >
+                    Prévisualiser ({bulkPricePreview.affected})
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={applyBulkPriceRule}
+                    disabled={
+                      isApplyingBulkPrices ||
+                      !bulkPreviewSnapshot ||
+                      isBulkPreviewStale ||
+                      !bulkConfirmChecked ||
+                      bulkPreviewSnapshot.affected === 0
+                    }
+                    className="rounded-full bg-brand-dark px-6 py-2 text-sm font-medium uppercase tracking-[0.15em] text-background shadow-lg transition-all duration-300 hover:bg-brand-primary hover:scale-105 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:scale-100"
+                  >
+                    {isApplyingBulkPrices
+                      ? "Application..."
+                      : `Confirmer et appliquer (${bulkPreviewSnapshot?.affected ?? 0})`}
+                  </button>
+
+                  {bulkPreviewSnapshot ? (
+                    <button
+                      type="button"
+                      onClick={clearBulkPricePreview}
+                      className="rounded-full border border-foreground/10 bg-background px-6 py-2 text-sm font-medium uppercase tracking-[0.15em] text-foreground/70 transition-all hover:bg-foreground/5"
+                    >
+                      Réinitialiser
+                    </button>
+                  ) : null}
+                </div>
+
+                <div className="mt-3 text-xs text-foreground/60">
+                  {bulkPricePreview.total === 0 ? (
+                    "Aucun prix sélectionné."
+                  ) : (
+                    <>
+                      Impact estimé (avant prévisualisation): {bulkPricePreview.affected} modifié(s),{" "}
+                      {bulkPricePreview.unchanged} inchangé(s)
+                    </>
+                  )}
+                </div>
+
+                {bulkPreviewSnapshot ? (
+                  <div className="mt-4 rounded-card border border-foreground/10 bg-secondary/40 p-4">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div className="text-sm text-foreground/70">
+                        Aperçu figé:{" "}
+                        <span className="font-medium">{bulkPreviewSnapshot.affected}</span>{" "}
+                        modification(s)
+                        {isBulkPreviewStale ? (
+                          <span className="ml-2 font-medium text-red-600">
+                            (aperçu expiré — re-prévisualisez)
+                          </span>
+                        ) : null}
+                      </div>
+                    </div>
+
+                    {bulkPreviewSnapshot.sample.length > 0 ? (
+                      <div className="mt-3 space-y-1 text-xs text-foreground/70">
+                        {bulkPreviewSnapshot.sample.map((s) => (
+                          <div key={s.id} className="flex flex-wrap items-center gap-2">
+                            <span>{s.label}</span>
+                            <span className="text-foreground/40">—</span>
+                            <span className="font-medium">
+                              {s.from.toFixed(2)}$ → {s.to.toFixed(2)}$
+                            </span>
+                          </div>
+                        ))}
+                        {bulkPreviewSnapshot.affected > bulkPreviewSnapshot.sample.length ? (
+                          <div className="mt-2 text-foreground/50">
+                            … et {bulkPreviewSnapshot.affected - bulkPreviewSnapshot.sample.length}{" "}
+                            autre(s) modification(s).
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : null}
+
+                    <label className="mt-4 flex items-start gap-3">
+                      <input
+                        type="checkbox"
+                        checked={bulkConfirmChecked}
+                        disabled={isBulkPreviewStale}
+                        onChange={(e) => setBulkConfirmChecked(e.target.checked)}
+                        className="mt-0.5 h-4 w-4"
+                      />
+                      <span className="text-sm text-foreground/70">
+                        Je confirme appliquer ces changements aux prix prévisualisés.
+                      </span>
+                    </label>
+                  </div>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
         </div>
       )}
     </div>

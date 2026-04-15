@@ -2,9 +2,8 @@
 
 import { createAdminClient } from "@/lib/supabase-server";
 import { revalidatePath } from "next/cache";
-import { requireAdmin } from "@/lib/admin-auth";
-import { submissionLineTotal } from "@/lib/submissions";
-import { computeCommissionFromGross } from "@/lib/commission-policy";
+import { requireSuperAdmin } from "@/lib/admin-auth";
+import { computeCommissionForLineUnits } from "@/lib/commission-policy";
 import { getActiveCommissionRules } from "@/lib/commission-rules-server";
 
 type UpdateSubmissionPriceParams = {
@@ -18,9 +17,9 @@ export async function updateSubmissionPrice({
   price,
   reason,
 }: UpdateSubmissionPriceParams) {
-  const admin = await requireAdmin();
+  const admin = await requireSuperAdmin();
   if (!admin) {
-    return { success: false, error: "Unauthorized" };
+    return { success: false, error: "Forbidden" };
   }
 
   const normalizedReason = (reason || "").trim();
@@ -61,9 +60,8 @@ export async function updateSubmissionPrice({
       : typeof quantityRaw === "string" && quantityRaw.trim() && Number.isFinite(Number(quantityRaw))
         ? Math.max(1, Math.floor(Number(quantityRaw)))
         : 1;
-  const gross = submissionLineTotal(price, quantity);
   const commissionRules = await getActiveCommissionRules();
-  const commission = computeCommissionFromGross(gross, commissionRules);
+  const commission = computeCommissionForLineUnits(price, quantity, commissionRules);
 
   const update = await supabase
     .from("submissions")

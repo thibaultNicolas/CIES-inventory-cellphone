@@ -9,10 +9,12 @@ import { AdminSidebar } from "./AdminSidebar";
 import { AdminUsersTable } from "./AdminUsersTable";
 import { OrdersTable, type OrderSummary } from "./OrdersTable";
 import { OrderDetail } from "./OrderDetail";
-import { ProductsManager } from "./ProductsManager";
+import { ProductsManager, type ProductsPricesFiltersInit } from "./ProductsManager";
 import { CommissionsDashboard } from "./CommissionsDashboard";
 import { CommissionRulesManager } from "./CommissionRulesManager";
 import { StaffReferenceManager } from "./StaffReferenceManager";
+import { StoreCashflowPanel } from "./StoreCashflowPanel";
+import type { CashflowOrphanRow, StoreCashflowRow } from "@/lib/petty-cash";
 import {
   ArrowLeft,
   Menu,
@@ -20,18 +22,21 @@ import {
   Users,
   ShoppingBag,
   Package,
-  DollarSign,
   Building2,
+  BarChart3,
+  Wallet,
 } from "lucide-react";
 import type { SubmissionStatus } from "@/lib/submissions";
 import type { AppRole } from "@/lib/app-role";
+import { canManagePaymentsAndCommissions } from "@/lib/app-role";
 
 type AdminSection =
   | "comptes"
   | "referentiel"
   | "demandes"
   | "produits"
-  | "commissions";
+  | "commissions"
+  | "caisse";
 
 type AdminUser = {
   id: string;
@@ -110,6 +115,18 @@ type Price = {
   };
 };
 
+/** Statistiques agrégées sur toutes les lignes correspondant aux filtres du rapport (hors pagination). */
+export type CommissionReportAggregates = {
+  totalUnits: number;
+  totalBuyback: number;
+  totalCommissionEmployee: number;
+  totalCommissionManager: number;
+  totalCommissionOwner: number;
+  totalCommission: number;
+  salesByMonth: Array<{ monthKey: string; units: number; buyback: number }>;
+  topModels: Array<{ label: string; units: number; buyback: number; commission: number }>;
+};
+
 export type CommissionsData = {
   submissions: Submission[];
   total: number;
@@ -123,6 +140,9 @@ export type CommissionsData = {
   globalYearManagerCommissionTotal: number;
   globalYearOwnerCommissionTotal: number;
   globalYearCommissionTotal: number;
+  globalYearOwnerToReceive: number;
+  globalYearOtherCommissionToReceive: number;
+  globalYearTotalToReceive: number;
   page: number;
   pageSize: number;
   fromDate: string;
@@ -147,9 +167,12 @@ type AdminLayoutProps = {
   prices: Price[];
   initialSection?: AdminSection;
   initialProductsTab?: "brands" | "models" | "prices";
+  initialProductsPricesFilters?: ProductsPricesFiltersInit;
   commissionsData?: CommissionsData | null;
+  commissionReportAggregates?: CommissionReportAggregates | null;
   employees: { id: string; full_name: string }[];
   stores: { id: string; name: string }[];
+  cashflowSnapshot: { rows: StoreCashflowRow[]; orphans: CashflowOrphanRow[] };
   /** Section Comptes (création d’utilisateurs) : super_admin uniquement. */
   canManageStaffAccounts?: boolean;
   viewerRole?: AppRole;
@@ -170,9 +193,12 @@ export function AdminLayout({
   prices,
   initialSection = "demandes",
   initialProductsTab = "brands",
+  initialProductsPricesFilters,
   commissionsData = null,
+  commissionReportAggregates = null,
   employees,
   stores,
+  cashflowSnapshot,
   canManageStaffAccounts = false,
   viewerRole = "admin",
 }: AdminLayoutProps) {
@@ -192,6 +218,7 @@ export function AdminLayout({
   const compactLogout =
     "h-9 border-brand-dark/35 px-4 py-0 text-[11px] tracking-[0.12em] sm:h-10 sm:px-5 sm:text-xs";
   const canManageProducts = viewerRole === "super_admin";
+  const canManageFinancials = canManagePaymentsAndCommissions(viewerRole);
   const sectionFromServer = useMemo<AdminSection>(
     () =>
       !canManageStaffAccounts && initialSection === "comptes"
@@ -216,7 +243,8 @@ export function AdminLayout({
         : []),
       { id: "referentiel", label: t.admin.reference, icon: Building2 },
       { id: "demandes", label: t.admin.tradeInRequests, icon: ShoppingBag },
-      { id: "commissions", label: t.admin.commissions, icon: DollarSign },
+      { id: "commissions", label: t.admin.commissions, icon: BarChart3 },
+      { id: "caisse", label: t.admin.pettyCashNav, icon: Wallet },
       ...(canManageProducts
         ? [{ id: "produits" as const, label: t.admin.products, icon: Package }]
         : []),
@@ -239,12 +267,14 @@ export function AdminLayout({
       url.searchParams.delete("commissionFrom");
       url.searchParams.delete("commissionTo");
     } else {
-      [
+           [
         "commissionPage",
         "commissionPageSize",
         "commissionFrom",
         "commissionTo",
         "commissionPaid",
+        "commissionEmployee",
+        "commissionStore",
       ].forEach((p) => url.searchParams.delete(p));
     }
     router.replace(
@@ -395,12 +425,18 @@ export function AdminLayout({
                     ? t.admin.tradeInRequestsCountLabelPlural
                     : t.admin.tradeInRequestsCountLabel}
                 </p>
+                {!canManageFinancials ? (
+                  <p className="mt-2 max-w-2xl text-sm text-foreground/55">
+                    {t.admin.adminReadOnlyFinancialsHint}
+                  </p>
+                ) : null}
               </div>
               {selectedOrder ? (
                 <OrderDetail
                   orderId={selectedOrder}
                   submissions={orderSubmissions}
-                  canManageCommissionPaid={viewerRole === "super_admin"}
+                  canManagePaymentsAndCommissions={canManageFinancials}
+                  viewerRole={viewerRole}
                 />
               ) : (
                 <OrdersTable
@@ -409,6 +445,8 @@ export function AdminLayout({
                   pageSize={ordersPageSize}
                   total={totalOrders}
                   totalPages={totalOrdersPages}
+                  viewerRole={viewerRole}
+                  canManagePaymentsAndCommissions={canManageFinancials}
                 />
               )}
             </div>
@@ -424,64 +462,119 @@ export function AdminLayout({
                   <p className="text-foreground/60">
                     {t.admin.commissionsSubtitle}
                   </p>
+                  <p className="mt-2 max-w-2xl text-sm text-foreground/55">
+                    {t.admin.reportPaymentActionsHint}
+                  </p>
                 </div>
                 {commissionsData ? (
-                  <section className="w-full max-w-[520px] rounded-card border border-foreground/10 bg-background p-4 shadow-soft">
-                    <h3 className="mb-3 text-xs font-semibold uppercase tracking-[0.08em] text-foreground/70">
-                      {t.admin.globalYearStatsTitle}
-                    </h3>
-                    <div className="space-y-2 text-sm">
-                      <div className="flex items-center justify-between">
-                        <span className="text-foreground/60">{t.admin.totalDevicesSoldLabel}</span>
-                        <span className="font-semibold text-brand-dark">
-                          {commissionsData.globalYearUnitsTotal}
-                        </span>
+                  <div className="flex w-full flex-col gap-4 lg:max-w-none lg:flex-row lg:flex-wrap lg:justify-end lg:gap-4">
+                    <section className="w-full max-w-[520px] shrink-0 rounded-card border border-foreground/10 bg-background p-4 shadow-soft lg:flex-1">
+                      <h3 className="mb-3 text-xs font-semibold uppercase tracking-[0.08em] text-foreground/70">
+                        {t.admin.globalYearStatsTitle}
+                      </h3>
+                      <div className="space-y-2 text-sm">
+                        <div className="flex items-center justify-between">
+                          <span className="text-foreground/60">{t.admin.totalDevicesSoldLabel}</span>
+                          <span className="font-semibold text-brand-dark">
+                            {commissionsData.globalYearUnitsTotal}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-foreground/60">{t.admin.totalBuybackAmountLabel}</span>
+                          <span className="font-semibold text-brand-dark">
+                            {commissionsData.globalYearBuybackTotal.toFixed(2)} $
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-foreground/60">{t.admin.totalEmployeeCommissionLabel}</span>
+                          <span className="font-semibold text-brand-dark">
+                            {commissionsData.globalYearEmployeeCommissionTotal.toFixed(2)} $
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-foreground/60">{t.admin.totalManagerCommissionLabel}</span>
+                          <span className="font-semibold text-brand-dark">
+                            {commissionsData.globalYearManagerCommissionTotal.toFixed(2)} $
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-foreground/60">{t.admin.totalOwnerCommissionLabel}</span>
+                          <span className="font-semibold text-brand-dark">
+                            {commissionsData.globalYearOwnerCommissionTotal.toFixed(2)} $
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between border-t border-foreground/10 pt-2">
+                          <span className="text-foreground/70">{t.admin.totalCommissionGlobalLabel}</span>
+                          <span className="font-semibold text-brand-primary">
+                            {commissionsData.globalYearCommissionTotal.toFixed(2)} $
+                          </span>
+                        </div>
                       </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-foreground/60">{t.admin.totalBuybackAmountLabel}</span>
-                        <span className="font-semibold text-brand-dark">
-                          {commissionsData.globalYearBuybackTotal.toFixed(2)} $
-                        </span>
+                    </section>
+                    <section className="w-full max-w-[520px] shrink-0 rounded-card border border-foreground/10 bg-background p-4 shadow-soft lg:flex-1">
+                      <h3 className="mb-3 text-xs font-semibold uppercase tracking-[0.08em] text-foreground/70">
+                        {t.admin.globalYearToReceiveTitle}
+                      </h3>
+                      <div className="space-y-2 text-sm">
+                        <div className="flex items-center justify-between">
+                          <span className="text-foreground/60">
+                            {t.admin.ownerCommissionToReceiveLabel}
+                          </span>
+                          <span className="font-semibold text-brand-dark">
+                            {commissionsData.globalYearOwnerToReceive.toFixed(2)} $
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-foreground/60">
+                            {t.admin.otherCommissionToReceiveLabel}
+                          </span>
+                          <span className="font-semibold text-brand-dark">
+                            {commissionsData.globalYearOtherCommissionToReceive.toFixed(2)} $
+                          </span>
+                        </div>
+                        <div className="border-t border-foreground/10 pt-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-foreground/70">{t.admin.totalToReceiveLabel}</span>
+                            <span className="font-semibold text-brand-primary">
+                              {commissionsData.globalYearTotalToReceive.toFixed(2)} $
+                            </span>
+                          </div>
+                          <p className="mt-1.5 text-[11px] leading-snug text-foreground/50">
+                            {t.admin.totalToReceiveBuybackHint}
+                          </p>
+                        </div>
                       </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-foreground/60">{t.admin.totalEmployeeCommissionLabel}</span>
-                        <span className="font-semibold text-brand-dark">
-                          {commissionsData.globalYearEmployeeCommissionTotal.toFixed(2)} $
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-foreground/60">{t.admin.totalManagerCommissionLabel}</span>
-                        <span className="font-semibold text-brand-dark">
-                          {commissionsData.globalYearManagerCommissionTotal.toFixed(2)} $
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-foreground/60">{t.admin.totalOwnerCommissionLabel}</span>
-                        <span className="font-semibold text-brand-dark">
-                          {commissionsData.globalYearOwnerCommissionTotal.toFixed(2)} $
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between border-t border-foreground/10 pt-2">
-                        <span className="text-foreground/70">{t.admin.totalCommissionGlobalLabel}</span>
-                        <span className="font-semibold text-brand-primary">
-                          {commissionsData.globalYearCommissionTotal.toFixed(2)} $
-                        </span>
-                      </div>
-                    </div>
-                  </section>
+                    </section>
+                  </div>
                 ) : null}
               </div>
               <CommissionsDashboard
                 commissionsData={commissionsData}
-                canManageCommissionPaid={viewerRole === "super_admin"}
+                commissionReportAggregates={commissionReportAggregates}
                 employees={employees}
                 stores={stores}
+                canExportPdf={canManageFinancials}
               />
               {viewerRole === "super_admin" ? (
                 <div className="mt-5">
                   <CommissionRulesManager />
                 </div>
               ) : null}
+            </div>
+          )}
+
+          {activeSection === "caisse" && (
+            <div>
+              <div className="mb-6 sm:mb-8">
+                <h1 className="mb-2 font-(family-name:--font-playfair) text-2xl font-light text-brand-dark sm:text-3xl md:text-4xl lg:text-5xl">
+                  {t.admin.pettyCashTitle}
+                </h1>
+              </div>
+              <StoreCashflowPanel
+                rows={cashflowSnapshot.rows}
+                orphans={cashflowSnapshot.orphans}
+                canEditOpening={viewerRole === "super_admin"}
+              />
             </div>
           )}
 
@@ -508,6 +601,7 @@ export function AdminLayout({
                 initialModels={models}
                 initialPrices={prices}
                 initialTab={initialProductsTab}
+                initialPricesFilters={initialProductsPricesFilters}
               />
             </div>
           )}

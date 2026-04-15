@@ -23,11 +23,10 @@ export const DEFAULT_COMMISSION_RULES: CommissionRule[] = [
 ];
 
 /**
- * Business rules:
- * - Donation / zero-value purchase: no commission.
- * - Employee: 5 CAD flat.
- * - Manager: 5 CAD flat.
- * - Owner by gross amount tiers (before commission).
+ * Business rules (per device, before scaling by quantity):
+ * - Donation / zero-value unit price: no commission.
+ * - Tiers use **unit gross** = unit buyback price (one phone).
+ * - Employee / manager / owner amounts from the matched tier are then multiplied by line quantity.
  */
 export function computeCommissionFromGross(
   grossAmount: number,
@@ -47,6 +46,39 @@ export function computeCommissionFromGross(
   const manager = Math.max(0, match.managerCommission);
   const owner = Math.max(0, match.ownerCommission);
 
+  return {
+    employee,
+    manager,
+    owner,
+    total: employee + manager + owner,
+  };
+}
+
+function clampLineQuantity(raw: number | null | undefined): number {
+  if (typeof raw !== "number" || !Number.isFinite(raw)) return 1;
+  const n = Math.floor(raw);
+  return n >= 1 ? Math.min(999, n) : 1;
+}
+
+/**
+ * Commissions for one submission line: tier is chosen from **unit price** (one device),
+ * then employee / manager / owner amounts are multiplied by **quantity**.
+ */
+export function computeCommissionForLineUnits(
+  unitPrice: number,
+  quantity: number | null | undefined,
+  rules: CommissionRule[] = DEFAULT_COMMISSION_RULES,
+): CommissionBreakdown {
+  const units = clampLineQuantity(quantity);
+  const unit = Number.isFinite(unitPrice) ? unitPrice : 0;
+  if (unit * units <= 0) {
+    return { employee: 0, manager: 0, owner: 0, total: 0 };
+  }
+
+  const perUnit = computeCommissionFromGross(unit, rules);
+  const employee = perUnit.employee * units;
+  const manager = perUnit.manager * units;
+  const owner = perUnit.owner * units;
   return {
     employee,
     manager,
