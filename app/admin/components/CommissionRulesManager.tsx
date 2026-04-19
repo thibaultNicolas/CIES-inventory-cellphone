@@ -67,7 +67,7 @@ export function CommissionRulesManager() {
   if (loading) {
     return (
       <div className="rounded-card border border-foreground/10 bg-background p-4 text-sm text-foreground/60">
-        {t.admin.loadingCommissions}
+        {t.admin.loadingCommissionRules}
       </div>
     );
   }

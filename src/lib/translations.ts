@@ -443,12 +443,14 @@ export const translations = {
       pettyCashOrphansHint:
         "Ces montants proviennent d’un « Magasin » sur la demande qui ne correspond à aucun magasin actif du référentiel (orthographe ou magasin désactivé).",
       pettyCashEditHint:
-        "Super administrateur : vous pouvez enregistrer la caisse au départ pour chaque magasin.",
+        "Administrateur : vous pouvez enregistrer la caisse au départ pour chaque magasin.",
       pettyCashReadOnlyHint:
-        "Consultation uniquement : la caisse au départ est modifiable par le super administrateur.",
+        "Consultation uniquement : vous n’avez pas les droits pour modifier la caisse au départ.",
       pettyCashNoStores: "Aucun magasin actif.",
       pettyCashInvalidAmount: "Montant invalide (nombre positif attendu).",
       pettyCashSaveError: "Erreur à l’enregistrement.",
+      pettyCashReportSectionTitle: "Cashflow — petite caisse par magasin",
+      pettyCashFullPageLink: "Ouvrir l’onglet Petite caisse",
       products: "Produits",
       filters: "Filtres :",
       period: "Période :",
@@ -585,9 +587,6 @@ export const translations = {
       devicesFilter: "Appareils (filtre)",
       commissionAmount: "Total de commission",
       valueCurrentPage: "Valeur (page actuelle)",
-      commissionPaidPage: "Commission payée (page)",
-      unpaidPage: "En attente (page)",
-      reportUnitsTotalLabel: "Unités vendues (filtre)",
       reportStatBuybackLabel: "Montant des rachats (filtre)",
       reportChartsSectionTitle: "Graphiques",
       reportChartSalesByMonth: "Ventes par mois (montant rachat)",
@@ -599,11 +598,12 @@ export const translations = {
       forbiddenFinancialAction:
         "Action réservée au super administrateur (paiement et commissions).",
       adminReadOnlyFinancialsHint:
-        "Consultation uniquement : vous pouvez annuler une commande. Modifier prix, statut de rachat ou commission payée est réservé au super administrateur.",
+        "Consultation : vous pouvez annuler une commande depuis le détail. Modifier prix, statut de paiement rachat ou commissions payées est réservé au super administrateur (onglet actuel).",
       noDevicesForPeriod: "Aucun appareil pour cette période",
       markAsPaid: "Marquer comme payée",
       markAsUnpaid: "Marquer comme non payée",
-      loadingCommissions: "Chargement des commissions…",
+      loadingCommissions: "Chargement des statistiques…",
+      loadingCommissionRules: "Chargement des règles…",
       reportLoading: "Chargement du rapport…",
       accountsManagement: "Gestion des comptes",
       accountsCountLabel: "compte",
@@ -611,12 +611,14 @@ export const translations = {
       tradeInRequestsTitle: "Demandes de rachat",
       tradeInRequestsCountLabel: "demande au total",
       tradeInRequestsCountLabelPlural: "demandes au total",
-      commissionsTitle: "Rapport & statistiques",
+      tradeInRequestsPaymentsHint:
+        "Super administrateur : gérez ici le statut de paiement rachat de chaque commande, ouvrez une commande pour ajuster les prix et marquer les commissions payées. Les règles de calcul des commissions se modifient en bas de cette page (liste des commandes).",
+      commissionsTitle: "Statistiques & rapports",
       commissionsSubtitle:
-        "Statistiques de ventes, graphiques et exports (CSV, PDF). Lecture seule — les paiements se font depuis les demandes de rachat.",
-      reportPaymentActionsHint:
-        "Super administrateur : paiements et commissions depuis « Demandes de rachat ». Administrateur : consultation et export CSV uniquement sur cet écran.",
-      reportStatsSectionTitle: "Statistiques",
+        "Tableaux, graphiques et exports (CSV, PDF selon les droits). Aucune action de paiement ni de commission sur cet écran.",
+      reportStatsOnlyHint:
+        "Pour enregistrer un paiement rachat, changer le statut d’une commande ou marquer des commissions comme payées, utilisez uniquement l’onglet « Demandes de rachat ». Le bloc « À recevoir » ignore les lignes dont la commission est marquée payée (commissions et total indicatif).",
+      reportStatsSectionTitle: "STATS",
       reportTableTitle: "Détail des lignes de rachat",
       commissionRulesTitle: "Règles de commission",
       addRuleLabel: "Ajouter une règle",
@@ -1061,12 +1063,14 @@ export const translations = {
       pettyCashOrphansHint:
         "These totals come from a store name on the request that does not match any active store in reference data (spelling or inactive store).",
       pettyCashEditHint:
-        "Super admin: you can save the opening cash balance for each store.",
+        "Admin: you can save the opening cash balance for each store.",
       pettyCashReadOnlyHint:
-        "View only: opening cash can be edited by the super admin.",
+        "View only: you don’t have permission to edit the opening cash balance.",
       pettyCashNoStores: "No active stores.",
       pettyCashInvalidAmount: "Invalid amount (expect a non-negative number).",
       pettyCashSaveError: "Could not save.",
+      pettyCashReportSectionTitle: "Cashflow — petty cash by store",
+      pettyCashFullPageLink: "Open Petty cash tab",
       products: "Products",
       filters: "Filters:",
       period: "Period:",
@@ -1189,7 +1193,7 @@ export const translations = {
       deleteOrder: "Delete",
       deleteOrderConfirm:
         "Are you sure you want to permanently delete this order and all its items? This action cannot be undone.",
-      orderMarkCancelled: "Cancel order",
+      orderMarkCancelled: "Cancel",
       orderMarkCancelledConfirm:
         "Mark this order as cancelled? All lines will be set to cancelled.",
       deleteConfirm:
@@ -1203,9 +1207,6 @@ export const translations = {
       devicesFilter: "Devices (filter)",
       commissionAmount: "Total commission",
       valueCurrentPage: "Value (current page)",
-      commissionPaidPage: "Commission paid (page)",
-      unpaidPage: "Pending (page)",
-      reportUnitsTotalLabel: "Units sold (filter)",
       reportStatBuybackLabel: "Buyback amount (filter)",
       reportChartsSectionTitle: "Charts",
       reportChartSalesByMonth: "Sales by month (buyback $)",
@@ -1217,11 +1218,12 @@ export const translations = {
       forbiddenFinancialAction:
         "This action is limited to super admins (payments and commissions).",
       adminReadOnlyFinancialsHint:
-        "View-only: you may cancel an order. Changing price, trade-in status or commission paid is limited to super admins.",
+        "View-only: you may cancel an order from the detail view. Changing price, trade-in payment status, or commission paid is limited to super admins (this tab).",
       noDevicesForPeriod: "No devices for this period",
       markAsPaid: "Mark as paid",
       markAsUnpaid: "Mark as unpaid",
-      loadingCommissions: "Loading commissions…",
+      loadingCommissions: "Loading statistics…",
+      loadingCommissionRules: "Loading rules…",
       reportLoading: "Loading report…",
       accountsManagement: "Account management",
       accountsCountLabel: "account",
@@ -1229,12 +1231,14 @@ export const translations = {
       tradeInRequestsTitle: "Trade-in requests",
       tradeInRequestsCountLabel: "request total",
       tradeInRequestsCountLabelPlural: "requests total",
-      commissionsTitle: "Report & statistics",
+      tradeInRequestsPaymentsHint:
+        "Super admin: set each order’s trade-in payment status here; open an order to adjust prices and mark commissions paid. Commission calculation rules are edited at the bottom of this page (order list).",
+      commissionsTitle: "Statistics & reports",
       commissionsSubtitle:
-        "Sales statistics, charts and exports (CSV, PDF). Read-only — payments are managed from trade-in requests.",
-      reportPaymentActionsHint:
-        "Super admin: payments and commissions under “Trade-in requests”. Admin: view and CSV export only on this screen.",
-      reportStatsSectionTitle: "Statistics",
+        "Charts and exports (CSV, PDF depending on role). No payment or commission actions on this screen.",
+      reportStatsOnlyHint:
+        "To record trade-in payments, change order status, or mark commissions paid, use the “Trade-in requests” tab only. The “Outstanding” summary excludes rows marked commission paid (commissions and indicative total).",
+      reportStatsSectionTitle: "STATS",
       reportTableTitle: "Trade-in line items",
       commissionRulesTitle: "Commission rules",
       addRuleLabel: "Add rule",

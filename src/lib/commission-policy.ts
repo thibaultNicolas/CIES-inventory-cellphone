@@ -1,3 +1,5 @@
+import { parseSubmissionLineQuantity } from "@/lib/submissions";
+
 export type CommissionBreakdown = {
   employee: number;
   manager: number;
@@ -54,22 +56,16 @@ export function computeCommissionFromGross(
   };
 }
 
-function clampLineQuantity(raw: number | null | undefined): number {
-  if (typeof raw !== "number" || !Number.isFinite(raw)) return 1;
-  const n = Math.floor(raw);
-  return n >= 1 ? Math.min(999, n) : 1;
-}
-
 /**
  * Commissions for one submission line: tier is chosen from **unit price** (one device),
  * then employee / manager / owner amounts are multiplied by **quantity**.
  */
 export function computeCommissionForLineUnits(
   unitPrice: number,
-  quantity: number | null | undefined,
+  quantity: number | string | null | undefined,
   rules: CommissionRule[] = DEFAULT_COMMISSION_RULES,
 ): CommissionBreakdown {
-  const units = clampLineQuantity(quantity);
+  const units = parseSubmissionLineQuantity(quantity);
   const unit = Number.isFinite(unitPrice) ? unitPrice : 0;
   if (unit * units <= 0) {
     return { employee: 0, manager: 0, owner: 0, total: 0 };

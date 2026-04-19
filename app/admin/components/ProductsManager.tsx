@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { sortMemoryCapacities } from "@/lib/memory-sort";
 import {
   Table,
   TableBody,
@@ -67,7 +68,7 @@ type ProductsManagerProps = {
 };
 
 const CONDITIONS = ["Comme neuf", "Bon", "Acceptable", "Rayé"];
-const MEMORIES = ["64GB", "128GB", "256GB", "512GB", "1TB"];
+const MEMORIES = ["32GB", "64GB", "128GB", "256GB", "512GB", "1TB"];
 
 export type ProductsPricesFiltersInit = {
   brand: string;
@@ -411,12 +412,16 @@ export function ProductsManager({
 
   const uniqueConditionsForPrices = useMemo(() => {
     const conditionSet = new Set(prices.map((p) => p.condition));
-    return Array.from(conditionSet).sort();
+    const ordered = CONDITIONS.filter((c) => conditionSet.has(c));
+    const extras = Array.from(conditionSet)
+      .filter((c) => !CONDITIONS.includes(c))
+      .sort();
+    return [...ordered, ...extras];
   }, [prices]);
 
   const uniqueMemoriesForPrices = useMemo(() => {
     const memorySet = new Set(prices.map((p) => p.memory));
-    return Array.from(memorySet).sort();
+    return sortMemoryCapacities(Array.from(memorySet));
   }, [prices]);
 
   const filteredPrices = useMemo(() => {

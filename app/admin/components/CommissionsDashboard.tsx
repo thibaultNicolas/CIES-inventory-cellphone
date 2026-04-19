@@ -2,6 +2,8 @@
 
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { StoreCashflowPanel } from "./StoreCashflowPanel";
+import type { CashflowOrphanRow, StoreCashflowRow } from "@/lib/petty-cash";
 import { useMemo, useState, useTransition } from "react";
 import {
   Table,
@@ -184,6 +186,8 @@ type CommissionsDashboardProps = {
   stores: { id: string; name: string }[];
   /** PDF réservé au super administrateur ; CSV reste disponible pour les admins. */
   canExportPdf?: boolean;
+  cashflowSnapshot: { rows: StoreCashflowRow[]; orphans: CashflowOrphanRow[] };
+  canEditPettyCash?: boolean;
 };
 
 export function CommissionsDashboard({
@@ -192,6 +196,8 @@ export function CommissionsDashboard({
   employees,
   stores,
   canExportPdf = false,
+  cashflowSnapshot,
+  canEditPettyCash = false,
 }: CommissionsDashboardProps) {
   const router = useRouter();
   const { t, locale } = useI18n();
@@ -499,7 +505,7 @@ export function CommissionsDashboard({
       <section className="space-y-3 rounded-card border border-foreground/10 bg-background p-4 shadow-soft">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h3 className="text-sm font-semibold uppercase tracking-[0.08em] text-foreground/70">
-            Filtres
+            {t.admin.filters}
           </h3>
           <div className="flex flex-wrap items-center gap-2">
             {canExportPdf ? (
@@ -536,7 +542,9 @@ export function CommissionsDashboard({
         <div className="flex flex-wrap items-center gap-3 sm:gap-4">
           <div className="flex items-center gap-2">
             <Filter className="h-4 w-4 shrink-0 text-foreground/60" />
-            <span className="text-sm font-medium text-foreground/70">{t.admin.commissionLabel}</span>
+            <span className="text-sm font-medium text-foreground/70">
+              {t.admin.filterByPaymentStatus}
+            </span>
           </div>
           <select
             value={commissionPaid}
@@ -637,7 +645,7 @@ export function CommissionsDashboard({
           <div className="rounded-card border border-foreground/10 bg-background p-4 shadow-soft">
             <div className="flex items-center gap-2 text-foreground/60">
               <Smartphone className="h-5 w-5" />
-              <span className="text-sm font-medium">{t.admin.reportUnitsTotalLabel}</span>
+              <span className="text-sm font-medium">{t.admin.devicesFilter}</span>
             </div>
             <p className="mt-2 font-(family-name:--font-playfair) text-3xl font-light text-brand-dark">
               {agg.totalUnits}
@@ -689,6 +697,25 @@ export function CommissionsDashboard({
             </p>
           </div>
         </div>
+      </section>
+
+      <section className="space-y-4 rounded-card border border-foreground/10 bg-background p-4 shadow-soft">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <h3 className="text-sm font-semibold uppercase tracking-[0.08em] text-foreground/70">
+            {t.admin.pettyCashReportSectionTitle}
+          </h3>
+          <Link
+            href="/admin?section=caisse"
+            className="text-xs font-medium text-brand-primary underline-offset-2 hover:underline"
+          >
+            {t.admin.pettyCashFullPageLink}
+          </Link>
+        </div>
+        <StoreCashflowPanel
+          rows={cashflowSnapshot.rows}
+          orphans={cashflowSnapshot.orphans}
+          canEditOpening={canEditPettyCash}
+        />
       </section>
 
       <section className="space-y-3">

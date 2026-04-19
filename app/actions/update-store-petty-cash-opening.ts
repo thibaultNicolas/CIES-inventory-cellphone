@@ -2,13 +2,13 @@
 
 import { revalidatePath } from "next/cache";
 import { createAdminClient } from "@/lib/supabase-server";
-import { requireSuperAdmin } from "@/lib/admin-auth";
+import { requireAdmin } from "@/lib/admin-auth";
 
 export async function updateStorePettyCashOpening(input: {
   storeId: string;
   amount: number;
 }) {
-  const admin = await requireSuperAdmin();
+  const admin = await requireAdmin();
   if (!admin) {
     return { success: false, error: "Forbidden" };
   }

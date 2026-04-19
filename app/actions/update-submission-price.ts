@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { requireSuperAdmin } from "@/lib/admin-auth";
 import { computeCommissionForLineUnits } from "@/lib/commission-policy";
 import { getActiveCommissionRules } from "@/lib/commission-rules-server";
+import { parseSubmissionLineQuantity } from "@/lib/submissions";
 
 type UpdateSubmissionPriceParams = {
   submissionId: string;
@@ -54,12 +55,7 @@ export async function updateSubmissionPrice({
       : typeof previousPriceRaw === "string" && previousPriceRaw.trim()
         ? Number(previousPriceRaw)
         : null;
-  const quantity =
-    typeof quantityRaw === "number" && Number.isFinite(quantityRaw)
-      ? Math.max(1, Math.floor(quantityRaw))
-      : typeof quantityRaw === "string" && quantityRaw.trim() && Number.isFinite(Number(quantityRaw))
-        ? Math.max(1, Math.floor(Number(quantityRaw)))
-        : 1;
+  const quantity = parseSubmissionLineQuantity(quantityRaw);
   const commissionRules = await getActiveCommissionRules();
   const commission = computeCommissionForLineUnits(price, quantity, commissionRules);
 

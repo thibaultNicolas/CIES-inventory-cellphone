@@ -13,6 +13,7 @@ import { getRequestIpForRateLimit } from "@/lib/request-ip";
 import { isUuid, signRachatViewToken } from "@/lib/rachat-view-token";
 import { computeCommissionForLineUnits } from "@/lib/commission-policy";
 import { getActiveCommissionRules } from "@/lib/commission-rules-server";
+import { parseSubmissionLineQuantity } from "@/lib/submissions";
 
 type SubmitRachatDevice = {
   modelId: string;
@@ -23,19 +24,9 @@ type SubmitRachatDevice = {
   memory: string;
   price: number;
   /** Nombre d’unités (défaut 1). Prix = prix unitaire. */
-  quantity?: number;
+  quantity?: number | string;
   devicePhotos: string[];
 };
-
-function clampSubmissionQuantity(raw: unknown): number {
-  const n =
-    typeof raw === "number" && Number.isFinite(raw)
-      ? Math.floor(raw)
-      : typeof raw === "string" && raw.trim() !== "" && Number.isFinite(Number(raw))
-        ? Math.floor(Number(raw))
-        : 1;
-  return n >= 1 ? Math.min(999, n) : 1;
-}
 
 type Locale = "fr" | "en";
 
@@ -269,6 +260,7 @@ async function enforceCatalogForDevices(
 
     out.push({
       ...device,
+      quantity: parseSubmissionLineQuantity(device.quantity),
       price: officialPrice,
       modelName,
       brandName,
@@ -319,7 +311,7 @@ export async function submitRachat(data: SubmitRachatData) {
             condition: data.condition,
             memory: data.memory,
             price: data.price,
-            quantity: clampSubmissionQuantity(data.quantity),
+            quantity: parseSubmissionLineQuantity(data.quantity),
             devicePhotos: data.devicePhotos || [],
           },
         ]
@@ -394,41 +386,40 @@ export async function submitRachat(data: SubmitRachatData) {
 
   const supabase = createAdminClient();
 
-  const payloads = devices.map((device) => ({
-    ...(function () {
-      const commission = computeCommissionForLineUnits(
-        device.price,
-        clampSubmissionQuantity(device.quantity),
-        commissionRules,
-      );
-      return {
-        commission_employee: commission.employee,
-        commission_manager: commission.manager,
-        commission_owner: commission.owner,
-      };
-    })(),
-    request_group_id: requestGroupId,
-    model_id: device.modelId,
-    brand_id: device.brandId,
-    model_name: device.modelName,
-    brand_name: device.brandName,
-    condition: device.condition,
-    memory: device.memory,
-    price: device.price,
-    quantity: clampSubmissionQuantity(device.quantity),
-    employee_full_name: resolvedEmployeeFullName,
-    store_name: contact.store_name || null,
-    client_full_name: contact.client_full_name,
-    client_account_number: contact.client_account_number || null,
-    client_city: contact.client_city,
-    device_imei: contact.device_imei,
-    customer_name: contact.customer_name,
-    customer_email: contact.customer_email || null,
-    customer_phone: contact.customer_phone,
-    customer_address: contact.customer_address || null,
-    device_photos: device.devicePhotos,
-    status: "unprocessed",
-  }));
+  const payloads = devices.map((device) => {
+    const lineQty = parseSubmissionLineQuantity(device.quantity);
+    const commission = computeCommissionForLineUnits(
+      device.price,
+      lineQty,
+      commissionRules,
+    );
+    return {
+      commission_employee: commission.employee,
+      commission_manager: commission.manager,
+      commission_owner: commission.owner,
+      request_group_id: requestGroupId,
+      model_id: device.modelId,
+      brand_id: device.brandId,
+      model_name: device.modelName,
+      brand_name: device.brandName,
+      condition: device.condition,
+      memory: device.memory,
+      price: device.price,
+      quantity: lineQty,
+      employee_full_name: resolvedEmployeeFullName,
+      store_name: contact.store_name || null,
+      client_full_name: contact.client_full_name,
+      client_account_number: contact.client_account_number || null,
+      client_city: contact.client_city,
+      device_imei: contact.device_imei,
+      customer_name: contact.customer_name,
+      customer_email: contact.customer_email || null,
+      customer_phone: contact.customer_phone,
+      customer_address: contact.customer_address || null,
+      device_photos: device.devicePhotos,
+      status: "unprocessed",
+    };
+  });
 
   let submissions: { id: string; created_at: string }[] | null = null;
   let error: { message: string } | null = null;
@@ -581,7 +572,7 @@ export async function submitRachat(data: SubmitRachatData) {
         uniqueId: requestGroupId,
         orderReference: requestGroupId.slice(0, 8).toUpperCase(),
         devicesCount: devices.reduce(
-          (sum, d) => sum + clampSubmissionQuantity(d.quantity),
+          (sum, d) => sum + parseSubmissionLineQuantity(d.quantity),
           0,
         ),
         customer: {

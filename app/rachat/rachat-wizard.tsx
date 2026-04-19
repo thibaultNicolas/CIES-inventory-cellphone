@@ -7,11 +7,12 @@ import { useRouter } from "next/navigation";
 import { sortModelsByRecent } from "@/lib/model-sort";
 import { createClient } from "@/lib/supabase-client";
 import { submitRachat } from "../actions/submit-rachat";
-import { submissionLineTotal } from "@/lib/submissions";
+import { parseSubmissionLineQuantity, submissionLineTotal } from "@/lib/submissions";
 import { Check, Sparkles, ThumbsUp, AlertTriangle, Trash2 } from "lucide-react";
 import { PriceHero } from "@/components/rachat/PriceHero";
 import { useI18n } from "@/contexts/I18nContext";
 import { ModelSearchBar } from "./components/ModelSearchBar";
+import { sortMemoryCapacities } from "@/lib/memory-sort";
 
 type Brand = {
   id: string;
@@ -31,21 +32,6 @@ type Model = {
 };
 
 type ConditionKey = "perfect" | "good" | "acceptable" | "scratched";
-
-/** Trie les capacités stockage du plus petit au plus grand (ex: 64GB, 256GB, 1TB). */
-function sortMemoryCapacities(memories: string[]): string[] {
-  const toSortKey = (s: string): number => {
-    const m = s
-      .trim()
-      .toUpperCase()
-      .match(/^(\d+(?:\.\d+)?)\s*(GB|TB)?$/i);
-    if (!m) return 0;
-    const value = parseFloat(m[1]);
-    const unit = (m[2] || "GB").toUpperCase();
-    return unit === "TB" ? value * 1024 : value;
-  };
-  return [...memories].sort((a, b) => toSortKey(a) - toSortKey(b));
-}
 
 type RachatWizardProps = {
   brands: Brand[];
@@ -140,14 +126,10 @@ export function RachatWizard({
   );
   const totalSavedUnits = useMemo(
     () =>
-      savedDevices.reduce((sum, device) => {
-        const q =
-          typeof device.quantity === "number" &&
-          Number.isFinite(device.quantity)
-            ? Math.floor(device.quantity)
-            : 1;
-        return sum + (q >= 1 ? Math.min(999, q) : 1);
-      }, 0),
+      savedDevices.reduce(
+        (sum, device) => sum + parseSubmissionLineQuantity(device.quantity),
+        0,
+      ),
     [savedDevices],
   );
   useEffect(() => {
@@ -254,6 +236,7 @@ export function RachatWizard({
     setSelectedMemory(null);
     setMemories([]);
     setPrice(null);
+    setCurrentQuantity(1);
     setIsLoadingPrice(false);
     setDirection(1);
     setStep(3);
@@ -298,11 +281,7 @@ export function RachatWizard({
       return null;
     }
 
-    const q =
-      typeof currentQuantity === "number" && Number.isFinite(currentQuantity)
-        ? Math.floor(currentQuantity)
-        : 1;
-    const quantity = q >= 1 ? Math.min(999, q) : 1;
+    const quantity = parseSubmissionLineQuantity(currentQuantity);
 
     return {
       modelId: selectedModel.id,
@@ -400,7 +379,7 @@ export function RachatWizard({
           condition: device.condition,
           memory: device.memory,
           price: device.price,
-          quantity: device.quantity,
+          quantity: parseSubmissionLineQuantity(device.quantity),
           devicePhotos: [],
         })),
         employeeId: formData.employeeId,

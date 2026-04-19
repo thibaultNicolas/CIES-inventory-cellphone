@@ -24,11 +24,15 @@ export function PriceHero({
   const previousPrice = useRef<number | null>(null);
 
   useEffect(() => {
-    if (price !== null && price !== previousPrice.current) {
+    if (price === null) {
+      previousPrice.current = null;
+      spring.set(0);
+      return;
+    }
+    // Après un reset (ex. changement de capacité), réappliquer même si le montant est identique.
+    if (previousPrice.current !== price) {
       spring.set(price);
       previousPrice.current = price;
-    } else if (price === null) {
-      spring.set(0);
     }
   }, [price, spring]);
 

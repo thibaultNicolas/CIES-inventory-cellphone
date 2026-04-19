@@ -86,11 +86,8 @@ export function OrdersTable({
   const canCancelOrder = hasMinRole(viewerRole, "admin");
   const canDeleteOrder = viewerRole === "super_admin";
   const [deletingOrderId, setDeletingOrderId] = useState<string | null>(null);
-  const [ordersState, setOrdersState] = useState<EditableOrderRow[]>(
-    orders.map((o) => ({
-      ...o,
-      status: o.status === "label_sent" ? "unprocessed" : o.status,
-    })),
+  const [ordersState, setOrdersState] = useState<EditableOrderRow[]>(() =>
+    orders.map((o) => ({ ...o })),
   );
   const [selectedOrderIds, setSelectedOrderIds] = useState<string[]>([]);
   const [bulkStatus, setBulkStatus] = useState<SubmissionStatus>("unprocessed");
@@ -100,12 +97,14 @@ export function OrdersTable({
     return [...ordersState].sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
   }, [ordersState]);
 
-  /** Deux statuts principaux dans la liste ; « Annulé » n’apparaît que si la commande l’est déjà (réactivation via le détail si besoin). */
+  /** Traitement par lot (super admin) : statuts modifiables depuis le détail ou ici. */
   const statusOptions = useMemo(
     () =>
       [
         { value: "unprocessed" as const, label: t.admin.statusPendingPayment },
+        { value: "label_sent" as const, label: t.admin.statusLabelSent },
         { value: "paid" as const, label: t.admin.statusPaid },
+        { value: "cancelled" as const, label: t.admin.statusCancelled },
       ] as const,
     [t.admin],
   );
@@ -314,49 +313,15 @@ export function OrdersTable({
                   </span>
                 </TableCell>
                 <TableCell className="whitespace-nowrap px-3 py-3 text-right text-sm font-semibold tabular-nums sm:px-6 sm:py-4">
-                  {formatMoney(
-                    order.gross_total -
-                      Number(order.commission_employee_total ?? 0) -
-                      Number(order.commission_manager_total ?? 0) -
-                      Number(order.commission_owner_total ?? 0),
-                  )}
+                  {formatMoney(order.gross_total)}
                 </TableCell>
                 <TableCell
                   className="text-center px-3 py-3 sm:px-6 sm:py-4"
                   onClick={(e) => e.stopPropagation()}
                 >
-                  {canManagePaymentsAndCommissions ? (
-                    <select
-                      value={
-                        order.status === "cancelled"
-                          ? "cancelled"
-                          : order.status === "paid"
-                            ? "paid"
-                            : "unprocessed"
-                      }
-                      onChange={(e) =>
-                        void handleStatusChange(
-                          order.orderId,
-                          e.target.value as SubmissionStatus,
-                        )
-                      }
-                      className="min-w-[180px] rounded-card border-2 border-transparent bg-[#F5F5F4] px-3 py-2 text-left text-xs font-medium text-foreground transition-all focus:border-brand-primary focus:bg-background focus:outline-none"
-                      aria-label={t.admin.status}
-                    >
-                      {statusOptions.map((status) => (
-                        <option key={status.value} value={status.value}>
-                          {status.label}
-                        </option>
-                      ))}
-                      {order.status === "cancelled" ? (
-                        <option value="cancelled">{t.admin.statusCancelled}</option>
-                      ) : null}
-                    </select>
-                  ) : (
-                    <span className="inline-block min-w-[140px] rounded-card border border-foreground/15 bg-[#F5F5F4] px-3 py-2 text-xs font-medium text-foreground">
-                      {t.admin[STATUS_LABEL_KEY[order.status]]}
-                    </span>
-                  )}
+                  <span className="inline-block min-w-[140px] rounded-card border border-foreground/15 bg-[#F5F5F4] px-3 py-2 text-xs font-medium text-foreground">
+                    {t.admin[STATUS_LABEL_KEY[order.status]]}
+                  </span>
                 </TableCell>
                 <TableCell className="text-right px-3 py-3 sm:px-6 sm:py-4">
                   <div className="inline-flex flex-wrap items-center justify-end gap-2">
@@ -403,6 +368,7 @@ export function OrdersTable({
                         }}
                         disabled={deletingOrderId === order.orderId}
                         className="inline-flex items-center justify-center rounded-card border border-red-500/30 bg-red-500/5 px-4 py-2 text-xs font-medium text-red-700 transition-colors hover:bg-red-500/10 disabled:opacity-50"
+                        aria-label={t.admin.deleteOrder}
                       >
                         {deletingOrderId === order.orderId ? "…" : t.admin.deleteOrder}
                       </button>

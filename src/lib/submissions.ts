@@ -128,16 +128,25 @@ export const SUBMISSIONS_SELECT_PDF =
 export const SUBMISSIONS_SELECT_CANONICAL =
   "id, created_at, status, brand_id, model_id, brand_name, model_name, memory, condition, price, quantity, employee_full_name, store_name, client_full_name, client_account_number, client_city, device_imei, customer_name, customer_email, customer_phone, customer_address, device_photos";
 
+/**
+ * Quantité pour une ligne de rachat (1–999). Accepte nombre ou chaîne (PostgREST / sérialisation).
+ * À utiliser pour totaux, commissions et persistance afin d’éviter qté = 1 par défaut par erreur.
+ */
+export function parseSubmissionLineQuantity(raw: unknown): number {
+  if (typeof raw === "number" && Number.isFinite(raw)) {
+    const n = Math.floor(raw);
+    return n >= 1 ? Math.min(999, n) : 1;
+  }
+  if (typeof raw === "string" && raw.trim() !== "") {
+    const n = Math.floor(Number(raw.trim()));
+    if (Number.isFinite(n)) return n >= 1 ? Math.min(999, n) : 1;
+  }
+  return 1;
+}
+
 /** Total pour une ligne (prix unitaire × quantité). */
-export function submissionLineTotal(
-  unitPrice: number,
-  quantity: number | null | undefined,
-): number {
-  const raw =
-    typeof quantity === "number" && Number.isFinite(quantity)
-      ? Math.floor(quantity)
-      : 1;
-  const q = raw >= 1 ? Math.min(999, raw) : 1;
+export function submissionLineTotal(unitPrice: number, quantity: unknown): number {
+  const q = parseSubmissionLineQuantity(quantity);
   return unitPrice * q;
 }
 
@@ -184,8 +193,7 @@ export function normalizeSubmissionRow(row: SubmissionRow): SubmissionNormalized
   const memory = asString(row.memory);
   const condition = asString(row.condition);
   const price = asNumber(row.price);
-  const qtyRaw = asNumber(row.quantity);
-  const quantity = qtyRaw >= 1 ? Math.min(999, Math.floor(qtyRaw)) : 1;
+  const quantity = parseSubmissionLineQuantity(row.quantity);
 
   const employee_full_name = asString(row.employee_full_name);
   const store_name = asString(row.store_name);

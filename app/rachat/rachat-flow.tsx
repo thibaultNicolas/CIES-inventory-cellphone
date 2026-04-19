@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase-client";
 import { sortModelsByRecent } from "@/lib/model-sort";
 import { submitRachat } from "../actions/submit-rachat";
+import { sortMemoryCapacities } from "@/lib/memory-sort";
 import { Check, Sparkles, ThumbsUp, AlertTriangle } from "lucide-react";
 
 type Brand = {
@@ -33,21 +34,6 @@ function looksLikeCanadianAddress(address: string): boolean {
   const hasPostal = /[A-Z]\d[A-Z]\s?\d[A-Z]\d/.test(value);
   const hasProvince = /\b(AB|BC|MB|NB|NL|NS|NT|NU|ON|PE|QC|SK|YT)\b/.test(value);
   return hasPostal && hasProvince;
-}
-
-/** Trie les capacités stockage du plus petit au plus grand (ex: 64GB, 256GB, 1TB). */
-function sortMemoryCapacities(memories: string[]): string[] {
-  const toSortKey = (s: string): number => {
-    const m = s
-      .trim()
-      .toUpperCase()
-      .match(/^(\d+(?:\.\d+)?)\s*(GB|TB)?$/i);
-    if (!m) return 0;
-    const value = parseFloat(m[1]);
-    const unit = (m[2] || "GB").toUpperCase();
-    return unit === "TB" ? value * 1024 : value;
-  };
-  return [...memories].sort((a, b) => toSortKey(a) - toSortKey(b));
 }
 
 type RachatFlowProps = {
@@ -249,6 +235,12 @@ export function RachatFlow({ brands, models }: RachatFlowProps) {
       value: "Bon",
       label: "Bon état",
       description: "Légères traces d'usure, fonctionne bien",
+      icon: <ThumbsUp className="h-6 w-6" strokeWidth={1.5} />,
+    },
+    {
+      value: "Acceptable",
+      label: "Acceptable",
+      description: "Usure visible, appareil fonctionnel",
       icon: <ThumbsUp className="h-6 w-6" strokeWidth={1.5} />,
     },
     {

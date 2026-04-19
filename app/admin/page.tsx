@@ -799,49 +799,67 @@ async function getCommissionsPaginated(
   let globalYearOtherCommissionToReceive = 0;
   let globalYearTotalToReceive = 0;
   try {
-    let unpaidQuery = supabase
-      .from("submissions")
-      .select("commission_employee, commission_manager, commission_owner")
-      .eq("commission_paid", false);
-    unpaidQuery = applyCommissionFilters(unpaidQuery, {
-      ...params,
-      commissionPaid: "unpaid",
-    });
-
-    const unpaidResult = await unpaidQuery;
-    if (!unpaidResult.error && unpaidResult.data) {
-      unpaidTotal = unpaidResult.data.reduce((sum, row) => {
-        const s = normalizeSubmissionRow(row as SubmissionRow);
-        return sum + s.commission_employee + s.commission_manager + s.commission_owner;
-      }, 0);
-      unpaidEmployeeTotal = unpaidResult.data.reduce((sum, row) => {
-        const s = normalizeSubmissionRow(row as SubmissionRow);
-        return sum + s.commission_employee;
-      }, 0);
-      unpaidManagerTotal = unpaidResult.data.reduce((sum, row) => {
-        const s = normalizeSubmissionRow(row as SubmissionRow);
-        return sum + s.commission_manager;
-      }, 0);
-      unpaidOwnerTotal = unpaidResult.data.reduce((sum, row) => {
-        const s = normalizeSubmissionRow(row as SubmissionRow);
-        return sum + s.commission_owner;
-      }, 0);
-    } else if (
-      unpaidResult.error &&
-      /quantity|column.*does not exist/i.test(String(unpaidResult.error.message))
-    ) {
-      let countQuery = supabase
+    const unpaidBatchSize = 1000;
+    let uCommSum = 0;
+    let uEmpSum = 0;
+    let uMgrSum = 0;
+    let uOwnSum = 0;
+    let unpaidLegacyCountOnly: number | null = null;
+    for (let p = 0; ; p += 1) {
+      const start = p * unpaidBatchSize;
+      const end = start + unpaidBatchSize - 1;
+      let unpaidQuery = supabase
         .from("submissions")
-        .select("id", { count: "exact", head: true })
-        .eq("commission_paid", false);
-      countQuery = applyCommissionFilters(countQuery, {
+        .select("commission_employee, commission_manager, commission_owner")
+        .eq("commission_paid", false)
+        .order("id", { ascending: true })
+        .range(start, end);
+      unpaidQuery = applyCommissionFilters(unpaidQuery, {
         ...params,
         commissionPaid: "unpaid",
       });
-      const countResult = await countQuery;
-      if (!countResult.error) {
-        unpaidTotal = countResult.count ?? 0;
+      const unpaidResult = await unpaidQuery;
+      if (unpaidResult.error) {
+        if (
+          p === 0 &&
+          /quantity|column.*does not exist/i.test(String(unpaidResult.error.message))
+        ) {
+          let countQuery = supabase
+            .from("submissions")
+            .select("id", { count: "exact", head: true })
+            .eq("commission_paid", false);
+          countQuery = applyCommissionFilters(countQuery, {
+            ...params,
+            commissionPaid: "unpaid",
+          });
+          const countResult = await countQuery;
+          if (!countResult.error) {
+            unpaidLegacyCountOnly = countResult.count ?? 0;
+          }
+        }
+        break;
       }
+      const batch = unpaidResult.data || [];
+      if (batch.length === 0) break;
+      for (const row of batch) {
+        const s = normalizeSubmissionRow(row as SubmissionRow);
+        uCommSum += s.commission_employee + s.commission_manager + s.commission_owner;
+        uEmpSum += s.commission_employee;
+        uMgrSum += s.commission_manager;
+        uOwnSum += s.commission_owner;
+      }
+      if (batch.length < unpaidBatchSize) break;
+    }
+    if (unpaidLegacyCountOnly !== null) {
+      unpaidTotal = unpaidLegacyCountOnly;
+      unpaidEmployeeTotal = 0;
+      unpaidManagerTotal = 0;
+      unpaidOwnerTotal = 0;
+    } else {
+      unpaidTotal = uCommSum;
+      unpaidEmployeeTotal = uEmpSum;
+      unpaidManagerTotal = uMgrSum;
+      unpaidOwnerTotal = uOwnSum;
     }
   } catch {
     unpaidTotal = 0;
@@ -854,26 +872,42 @@ async function getCommissionsPaginated(
     const year = new Date().getUTCFullYear();
     const fromYear = `${year}-01-01T00:00:00.000Z`;
     const toYear = `${year + 1}-01-01T00:00:00.000Z`;
-    const globalResult = await supabase
-      .from("submissions")
-      .select("price, quantity, commission_employee, commission_manager, commission_owner")
-      .gte("created_at", fromYear)
-      .lt("created_at", toYear);
-    if (!globalResult.error && globalResult.data) {
-      for (const row of globalResult.data as SubmissionRow[]) {
+    const batchSize = 1000;
+    let gyUnits = 0;
+    let gyBuyback = 0;
+    let gyEmp = 0;
+    let gyMgr = 0;
+    let gyOwn = 0;
+    for (let p = 0; ; p += 1) {
+      const start = p * batchSize;
+      const end = start + batchSize - 1;
+      const { data, error } = await supabase
+        .from("submissions")
+        .select("price, quantity, commission_employee, commission_manager, commission_owner")
+        .gte("created_at", fromYear)
+        .lt("created_at", toYear)
+        .order("id", { ascending: true })
+        .range(start, end);
+      if (error) throw error;
+      const batch = (data || []) as SubmissionRow[];
+      if (batch.length === 0) break;
+      for (const row of batch) {
         const s = normalizeSubmissionRow(row);
         const lineTotal = submissionLineTotal(s.price, s.quantity);
-        globalYearUnitsTotal += s.quantity;
-        globalYearBuybackTotal += lineTotal;
-        globalYearEmployeeCommissionTotal += s.commission_employee;
-        globalYearManagerCommissionTotal += s.commission_manager;
-        globalYearOwnerCommissionTotal += s.commission_owner;
+        gyUnits += s.quantity;
+        gyBuyback += lineTotal;
+        gyEmp += s.commission_employee;
+        gyMgr += s.commission_manager;
+        gyOwn += s.commission_owner;
       }
-      globalYearCommissionTotal =
-        globalYearOwnerCommissionTotal +
-        globalYearEmployeeCommissionTotal +
-        globalYearManagerCommissionTotal;
+      if (batch.length < batchSize) break;
     }
+    globalYearUnitsTotal = gyUnits;
+    globalYearBuybackTotal = gyBuyback;
+    globalYearEmployeeCommissionTotal = gyEmp;
+    globalYearManagerCommissionTotal = gyMgr;
+    globalYearOwnerCommissionTotal = gyOwn;
+    globalYearCommissionTotal = gyOwn + gyEmp + gyMgr;
   } catch {
     globalYearUnitsTotal = 0;
     globalYearBuybackTotal = 0;
@@ -887,24 +921,39 @@ async function getCommissionsPaginated(
     const year = new Date().getUTCFullYear();
     const fromYear = `${year}-01-01T00:00:00.000Z`;
     const toYear = `${year + 1}-01-01T00:00:00.000Z`;
-    const toReceiveResult = await supabase
-      .from("submissions")
-      .select("price, quantity, commission_employee, commission_manager, commission_owner")
-      .eq("commission_paid", false)
-      .gte("created_at", fromYear)
-      .lt("created_at", toYear);
-    if (!toReceiveResult.error && toReceiveResult.data) {
-      for (const row of toReceiveResult.data as SubmissionRow[]) {
+    const batchSize = 1000;
+    let recvOwn = 0;
+    let recvOther = 0;
+    let recvTotal = 0;
+    for (let p = 0; ; p += 1) {
+      const start = p * batchSize;
+      const end = start + batchSize - 1;
+      const { data, error } = await supabase
+        .from("submissions")
+        .select("price, quantity, commission_employee, commission_manager, commission_owner")
+        .eq("commission_paid", false)
+        .gte("created_at", fromYear)
+        .lt("created_at", toYear)
+        .order("id", { ascending: true })
+        .range(start, end);
+      if (error) throw error;
+      const batch = (data || []) as SubmissionRow[];
+      if (batch.length === 0) break;
+      for (const row of batch) {
         const s = normalizeSubmissionRow(row);
         const lineTotal = submissionLineTotal(s.price, s.quantity);
         const emp = Number(s.commission_employee ?? 0);
         const mgr = Number(s.commission_manager ?? 0);
         const own = Number(s.commission_owner ?? 0);
-        globalYearOwnerToReceive += own;
-        globalYearOtherCommissionToReceive += emp + mgr;
-        globalYearTotalToReceive += lineTotal + emp + mgr + own;
+        recvOwn += own;
+        recvOther += emp + mgr;
+        recvTotal += lineTotal + emp + mgr + own;
       }
+      if (batch.length < batchSize) break;
     }
+    globalYearOwnerToReceive = recvOwn;
+    globalYearOtherCommissionToReceive = recvOther;
+    globalYearTotalToReceive = recvTotal;
   } catch {
     globalYearOwnerToReceive = 0;
     globalYearOtherCommissionToReceive = 0;
