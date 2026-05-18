@@ -16,6 +16,7 @@ import {
 import { useI18n } from "@/contexts/I18nContext";
 import type { CommissionsData, CommissionReportAggregates } from "./AdminLayout";
 import { submissionLineTotal } from "@/lib/submissions";
+import { formatReportMonthLabel } from "@/lib/report-dates";
 import {
   Filter,
   Smartphone,
@@ -207,18 +208,11 @@ export function CommissionsDashboard({
   const agg = commissionReportAggregates ?? EMPTY_AGG;
 
   const salesChartData = useMemo(() => {
-    return agg.salesByMonth.map((row) => {
-      const [y, m] = row.monthKey.split("-").map(Number);
-      const label = new Date(Date.UTC(y, m - 1, 1)).toLocaleDateString(
-        locale === "en" ? "en-CA" : "fr-CA",
-        { month: "short", year: "numeric" },
-      );
-      return {
-        ...row,
-        label,
-        buyback: Math.round(row.buyback * 100) / 100,
-      };
-    });
+    return agg.salesByMonth.map((row) => ({
+      ...row,
+      label: formatReportMonthLabel(row.monthKey, locale),
+      buyback: Math.round(row.buyback * 100) / 100,
+    }));
   }, [agg.salesByMonth, locale]);
 
   const commissionPieData = useMemo(

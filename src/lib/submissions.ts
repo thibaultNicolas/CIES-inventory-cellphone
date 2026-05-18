@@ -150,6 +150,25 @@ export function submissionLineTotal(unitPrice: number, quantity: unknown): numbe
   return unitPrice * q;
 }
 
+/** Prix de rachat + commissions employé, gérant et proprio (total commande). */
+export function orderGrandTotal(order: {
+  gross_total: number;
+  commission_employee_total?: number | null;
+  commission_manager_total?: number | null;
+  commission_owner_total?: number | null;
+}): number {
+  const gross = Number.isFinite(order.gross_total) ? order.gross_total : 0;
+  const employee = Number(order.commission_employee_total ?? 0);
+  const manager = Number(order.commission_manager_total ?? 0);
+  const owner = Number(order.commission_owner_total ?? 0);
+  return (
+    gross +
+    (Number.isFinite(employee) ? employee : 0) +
+    (Number.isFinite(manager) ? manager : 0) +
+    (Number.isFinite(owner) ? owner : 0)
+  );
+}
+
 function asString(value: unknown): string {
   return typeof value === "string" ? value : value == null ? "" : String(value);
 }

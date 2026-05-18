@@ -20,9 +20,16 @@ export async function updateCommissionPaid({
 
   const supabase = createAdminClient();
 
+  const payload: { commission_paid: boolean; status?: string } = {
+    commission_paid: commissionPaid,
+  };
+  if (commissionPaid) {
+    payload.status = "paid";
+  }
+
   const { error } = await supabase
     .from("submissions")
-    .update({ commission_paid: commissionPaid })
+    .update(payload)
     .eq("id", submissionId);
 
   if (error) {

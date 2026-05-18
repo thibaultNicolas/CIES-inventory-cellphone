@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import { useI18n } from "@/contexts/I18nContext";
@@ -8,8 +8,16 @@ import { updateSubmissionPrice } from "../../actions/update-submission-price";
 import { updateCommissionPaid } from "../../actions/update-commission-paid";
 import { deleteOrder } from "../../actions/delete-order";
 import { updateOrderStatus } from "../../actions/update-order-status";
+import { updateOrderStore } from "../../actions/update-order-store";
 import { uploadShippingLabel } from "../actions/upload-shipping-label";
 import type { SubmissionStatus } from "@/lib/submissions";
+import {
+  normalizeOverallOrderStatus,
+  ORDER_STATUS_BADGE_CLASS,
+  orderStatusUiToDb,
+  toOrderStatusUi,
+  type OrderStatusUi,
+} from "@/lib/order-status";
 import { submissionLineTotal } from "@/lib/submissions";
 import type { AppRole } from "@/lib/app-role";
 import { hasMinRole } from "@/lib/app-role";
@@ -54,6 +62,7 @@ export type OrderDetailSubmission = {
 type OrderDetailProps = {
   orderId: string;
   submissions: OrderDetailSubmission[];
+  stores: { id: string; name: string }[];
   /** Prix, statuts de rachat, commission payée : super_admin uniquement. */
   canManagePaymentsAndCommissions?: boolean;
   viewerRole: AppRole;
@@ -70,45 +79,39 @@ function formatDate(dateString: string, locale: string) {
   }).format(date);
 }
 
-function normalizeOverallStatus(
-  submissions: ReadonlyArray<{ status: SubmissionStatus }>,
-) {
-  if (submissions.length === 0) return "unprocessed" as const;
-  const statuses = new Set(submissions.map((s) => s.status));
-  if (statuses.size === 1) return submissions[0].status;
-  if (statuses.has("cancelled")) return "cancelled" as const;
-  if (statuses.has("unprocessed")) return "unprocessed" as const;
-  if (statuses.has("label_sent")) return "label_sent" as const;
-  if (statuses.has("paid")) return "paid" as const;
-  return submissions[0].status;
-}
-
-const STATUS_LABEL_KEY: Record<
-  SubmissionStatus,
-  "statusUnprocessed" | "statusLabelSent" | "statusPaid" | "statusCancelled"
+const ORDER_STATUS_LABEL_KEY: Record<
+  OrderStatusUi,
+  "orderStatusPending" | "orderStatusPaid" | "orderStatusCancelled"
 > = {
-  unprocessed: "statusUnprocessed",
-  label_sent: "statusLabelSent",
-  paid: "statusPaid",
-  cancelled: "statusCancelled",
+  pending: "orderStatusPending",
+  paid: "orderStatusPaid",
+  cancelled: "orderStatusCancelled",
 };
 
 export function OrderDetail({
   orderId,
   submissions,
+  stores,
   canManagePaymentsAndCommissions = false,
   viewerRole,
 }: OrderDetailProps) {
   const router = useRouter();
   const { t, locale } = useI18n();
   const canCancelOrder = hasMinRole(viewerRole, "admin");
+  const canEditStore = hasMinRole(viewerRole, "admin");
   const canDeleteOrder = viewerRole === "super_admin";
   const [isWorking, setIsWorking] = useState<Record<string, boolean>>({});
   const [isUploadingLabel, setIsUploadingLabel] = useState(false);
   const [isLabelDragActive, setIsLabelDragActive] = useState(false);
   const labelFileInputRef = useRef<HTMLInputElement | null>(null);
   const [isUpdatingOrderStatus, setIsUpdatingOrderStatus] = useState(false);
+  const [isUpdatingStore, setIsUpdatingStore] = useState(false);
+  const [storeName, setStoreName] = useState(() => submissions[0]?.store_name ?? "");
   const [isDeletingOrder, setIsDeletingOrder] = useState(false);
+
+  useEffect(() => {
+    setStoreName(submissions[0]?.store_name ?? "");
+  }, [submissions]);
   const [priceEditor, setPriceEditor] = useState<{
     submissionId: string;
     price: string;
@@ -124,7 +127,10 @@ export function OrderDetail({
       a.created_at < b.created_at ? -1 : 1,
     );
     const first = sortedByDate[0];
-    const overallStatus = normalizeOverallStatus(submissions);
+    const overallStatus = normalizeOverallOrderStatus(
+      new Set(submissions.map((s) => s.status)),
+    );
+    const overallStatusUi = toOrderStatusUi(overallStatus);
     const devicesTotal = submissions.reduce(
       (sum, s) => sum + submissionLineTotal(s.price, s.quantity),
       0,
@@ -153,6 +159,7 @@ export function OrderDetail({
     return {
       first,
       overallStatus,
+      overallStatusUi,
       devicesTotal,
       orderUnitsTotal,
       employeeCommissionTotal,
@@ -244,9 +251,25 @@ export function OrderDetail({
     router.refresh();
   }
 
-  async function handleOrderStatusChange(newStatus: SubmissionStatus) {
+  async function handleStoreChange(nextStoreName: string) {
+    if (!canEditStore || !nextStoreName) return;
+    setIsUpdatingStore(true);
+    const result = await updateOrderStore({ orderId, storeName: nextStoreName });
+    setIsUpdatingStore(false);
+    if (!result.success) {
+      alert(result.error || t.admin.errorUpdateStore);
+      return;
+    }
+    setStoreName(result.storeName ?? nextStoreName);
+    router.refresh();
+  }
+
+  async function handleOrderStatusChange(newStatus: OrderStatusUi) {
     setIsUpdatingOrderStatus(true);
-    const result = await updateOrderStatus({ orderId, status: newStatus });
+    const result = await updateOrderStatus({
+      orderId,
+      status: orderStatusUiToDb(newStatus),
+    });
     setIsUpdatingOrderStatus(false);
     if (!result.success) {
       alert(
@@ -263,7 +286,7 @@ export function OrderDetail({
     if (!canCancelOrder) return;
     const ok = confirm(t.admin.orderMarkCancelledConfirm);
     if (!ok) return;
-    await handleOrderStatusChange("cancelled");
+    await handleOrderStatusChange("cancelled" satisfies OrderStatusUi);
   }
 
   async function handleDeleteOrder() {
@@ -330,8 +353,11 @@ export function OrderDetail({
             <h2 className="font-(family-name:--font-playfair) text-2xl font-light text-brand-dark sm:text-3xl">
               {t.admin.orderTitle} {displayOrder}
             </h2>
-            <Badge variant={summary.overallStatus}>
-              {t.admin[STATUS_LABEL_KEY[summary.overallStatus]]}
+            <Badge
+              variant="outline"
+              className={ORDER_STATUS_BADGE_CLASS[summary.overallStatusUi]}
+            >
+              {t.admin[ORDER_STATUS_LABEL_KEY[summary.overallStatusUi]]}
             </Badge>
           </div>
           <p className="text-sm text-foreground/60">
@@ -343,26 +369,25 @@ export function OrderDetail({
         <div className="flex flex-wrap items-center gap-2">
           {canManagePaymentsAndCommissions ? (
             <select
-              value={summary.overallStatus}
+              value={summary.overallStatusUi}
               disabled={isUpdatingOrderStatus}
               onChange={(e) =>
-                void handleOrderStatusChange(e.target.value as SubmissionStatus)
+                void handleOrderStatusChange(e.target.value as OrderStatusUi)
               }
               className="rounded-card border border-foreground/10 bg-background px-3 py-2 text-xs text-foreground outline-none transition-colors focus:border-brand-primary disabled:opacity-60"
               aria-label={t.admin.status}
               title={t.admin.status}
             >
-              <option value="unprocessed">{t.admin.statusUnprocessed}</option>
-              <option value="label_sent">{t.admin.statusLabelSent}</option>
-              <option value="paid">{t.admin.statusPaid}</option>
-              <option value="cancelled">{t.admin.statusCancelled}</option>
+              <option value="pending">{t.admin.orderStatusPending}</option>
+              <option value="paid">{t.admin.orderStatusPaid}</option>
+              <option value="cancelled">{t.admin.orderStatusCancelled}</option>
             </select>
           ) : null}
           {canCancelOrder ? (
             <button
               type="button"
               onClick={() => void handleMarkCancelled()}
-              disabled={isUpdatingOrderStatus || summary.overallStatus === "cancelled"}
+              disabled={isUpdatingOrderStatus || summary.overallStatusUi === "cancelled"}
               className="inline-flex items-center justify-center rounded-card border-2 border-transparent bg-[#F5F5F4] px-4 py-2 text-xs font-medium text-foreground transition-all duration-300 hover:border-amber-500/50 hover:bg-amber-500/5 hover:scale-105 disabled:cursor-not-allowed disabled:opacity-45"
             >
               {t.admin.orderMarkCancelled}
@@ -569,14 +594,39 @@ export function OrderDetail({
                   <div className="font-medium text-foreground">{customer.employeeName}</div>
                 </div>
               ) : null}
-              {customer.storeName ? (
-                <div>
-                  <div className="text-xs font-medium uppercase tracking-[0.12em] text-foreground/60">
-                    {t.admin.storeNameLabel}
-                  </div>
-                  <div className="text-foreground/90">{customer.storeName}</div>
+              <div>
+                <div className="text-xs font-medium uppercase tracking-[0.12em] text-foreground/60">
+                  {t.admin.storeNameLabel}
                 </div>
-              ) : null}
+                {canEditStore ? (
+                  <select
+                    value={storeName || customer.storeName || ""}
+                    disabled={isUpdatingStore}
+                    onChange={(e) => void handleStoreChange(e.target.value)}
+                    className="mt-1 w-full max-w-xs rounded-card border border-foreground/15 bg-background px-3 py-2 text-sm font-medium text-brand-primary focus:border-brand-primary focus:outline-none disabled:opacity-60"
+                    aria-label={t.admin.assignStore}
+                  >
+                    <option value="" disabled>
+                      {t.admin.selectStore}
+                    </option>
+                    {(storeName || customer.storeName) &&
+                    !stores.some((s) => s.name === (storeName || customer.storeName)) ? (
+                      <option value={storeName || customer.storeName}>
+                        {storeName || customer.storeName}
+                      </option>
+                    ) : null}
+                    {stores.map((store) => (
+                      <option key={store.id} value={store.name}>
+                        {store.name}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <div className="mt-1 font-medium text-brand-primary">
+                    {customer.storeName || "—"}
+                  </div>
+                )}
+              </div>
               <div>
                 <div className="text-xs font-medium uppercase tracking-[0.12em] text-foreground/60">
                   {t.admin.clientFullNameLabel}

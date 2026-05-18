@@ -16,7 +16,15 @@ type QueryLike = {
   gte: (column: string, value: string) => QueryLike;
   lte: (column: string, value: string) => QueryLike;
   eq: (column: string, value: string | boolean) => QueryLike;
+  neq: (column: string, value: string | boolean) => QueryLike;
 };
+
+/** Lignes encore « à recevoir » : commission non payée et rachat non soldé. */
+export function applyReceivableFilters<T>(query: T): T {
+  let q = query as unknown as QueryLike;
+  q = q.eq("commission_paid", false).neq("status", "paid").neq("status", "cancelled");
+  return q as unknown as T;
+}
 
 export function applyCommissionFilters<T>(
   query: T,
@@ -32,7 +40,7 @@ export function applyCommissionFilters<T>(
   if (params.commissionPaid === "paid") {
     q = q.eq("commission_paid", true);
   } else if (params.commissionPaid === "unpaid") {
-    q = q.eq("commission_paid", false);
+    q = applyReceivableFilters(q) as unknown as QueryLike;
   }
   if (params.employeeFullName) {
     q = q.eq("employee_full_name", params.employeeFullName);

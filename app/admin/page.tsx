@@ -3,6 +3,7 @@ import type { SubmissionRow, SubmissionStatus } from "@/lib/submissions";
 import {
   normalizeSubmissionRow,
   SUBMISSIONS_SELECT_ADMIN_LIST,
+  orderGrandTotal,
   submissionLineTotal,
 } from "@/lib/submissions";
 import { AdminLayout, type CommissionReportAggregates } from "./components/AdminLayout";
@@ -10,8 +11,16 @@ import type { ProductsPricesFiltersInit } from "./components/ProductsManager";
 import { buildStoreCashflowSnapshot } from "@/lib/petty-cash";
 import { getStaff, requireAdmin } from "@/lib/admin-auth";
 import { parseAppRole, type AppRole } from "@/lib/app-role";
-import { applyCommissionFilters } from "@/lib/commission-filters";
+import { applyCommissionFilters, applyReceivableFilters } from "@/lib/commission-filters";
+import { submissionMonthKey } from "@/lib/report-dates";
 import { redirect } from "next/navigation";
+import {
+  isOrderStatusUi,
+  normalizeOverallOrderStatus,
+  orderMatchesStatusFilter,
+  parseOrdersStoresParam,
+  type OrderStatusUi,
+} from "@/lib/order-status";
 
 type AdminUser = {
   id: string;
@@ -21,16 +30,6 @@ type AdminUser = {
   last_login: string | null;
   role: AppRole;
 };
-
-function normalizeOverallOrderStatus(statuses: ReadonlySet<SubmissionStatus>): SubmissionStatus {
-  if (statuses.size === 0) return "unprocessed";
-  if (statuses.size === 1) return statuses.values().next().value as SubmissionStatus;
-  if (statuses.has("cancelled")) return "cancelled";
-  if (statuses.has("unprocessed")) return "unprocessed";
-  if (statuses.has("label_sent")) return "label_sent";
-  if (statuses.has("paid")) return "paid";
-  return statuses.values().next().value as SubmissionStatus;
-}
 
 function isStaffAuthUser(user: { app_metadata?: Record<string, unknown> | null }) {
   return parseAppRole(user.app_metadata ?? undefined) != null;
@@ -77,9 +76,15 @@ type SearchParams = {
   section?: string;
   tab?: string;
   order?: string;
-  /** Orders list pagination */
+  /** Orders list pagination & filters */
   ordersPage?: string;
   ordersPageSize?: string;
+  /** Magasins (sélection multiple, séparés par des virgules encodées) */
+  ordersStores?: string;
+  /** @deprecated utiliser ordersStores */
+  ordersStore?: string;
+  ordersStatus?: string;
+  ordersSort?: string;
   /** Commissions: pagination & filters */
   commissionPage?: string;
   commissionPageSize?: string;
@@ -388,6 +393,9 @@ async function getStores(): Promise<StoreRef[]> {
 
 const COMMISSIONS_DEFAULT_PAGE_SIZE = 20;
 
+const ORDERS_DEFAULT_PAGE_SIZE = 20;
+const ORDERS_PAGE_SIZES = new Set([20, 50, 100, 500, 1000]);
+const ORDERS_SORT_VALUES = new Set(["date-desc", "date-asc", "store-asc", "store-desc"]);
 const PRICES_PAGE_SIZES = new Set([10, 25, 50, 100, 250, 500, 1000]);
 
 function parseProductsPricesFilters(sp: SearchParams): ProductsPricesFiltersInit {
@@ -514,8 +522,7 @@ async function getCommissionReportAggregates(
         totalCommissionEmployee += ce;
         totalCommissionManager += cm;
         totalCommissionOwner += co;
-        const d = new Date(s.created_at);
-        const monthKey = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+        const monthKey = submissionMonthKey(s.created_at);
         const mm = monthMap.get(monthKey) ?? { units: 0, buyback: 0 };
         mm.units += s.quantity;
         mm.buyback += lineTotal;
@@ -808,10 +815,11 @@ async function getCommissionsPaginated(
     for (let p = 0; ; p += 1) {
       const start = p * unpaidBatchSize;
       const end = start + unpaidBatchSize - 1;
-      let unpaidQuery = supabase
-        .from("submissions")
-        .select("commission_employee, commission_manager, commission_owner")
-        .eq("commission_paid", false)
+      let unpaidQuery = applyReceivableFilters(
+        supabase
+          .from("submissions")
+          .select("commission_employee, commission_manager, commission_owner"),
+      )
         .order("id", { ascending: true })
         .range(start, end);
       unpaidQuery = applyCommissionFilters(unpaidQuery, {
@@ -824,10 +832,9 @@ async function getCommissionsPaginated(
           p === 0 &&
           /quantity|column.*does not exist/i.test(String(unpaidResult.error.message))
         ) {
-          let countQuery = supabase
-            .from("submissions")
-            .select("id", { count: "exact", head: true })
-            .eq("commission_paid", false);
+          let countQuery = applyReceivableFilters(
+            supabase.from("submissions").select("id", { count: "exact", head: true }),
+          );
           countQuery = applyCommissionFilters(countQuery, {
             ...params,
             commissionPaid: "unpaid",
@@ -928,10 +935,11 @@ async function getCommissionsPaginated(
     for (let p = 0; ; p += 1) {
       const start = p * batchSize;
       const end = start + batchSize - 1;
-      const { data, error } = await supabase
-        .from("submissions")
-        .select("price, quantity, commission_employee, commission_manager, commission_owner")
-        .eq("commission_paid", false)
+      const { data, error } = await applyReceivableFilters(
+        supabase
+          .from("submissions")
+          .select("price, quantity, commission_employee, commission_manager, commission_owner"),
+      )
         .gte("created_at", fromYear)
         .lt("created_at", toYear)
         .order("id", { ascending: true })
@@ -1023,10 +1031,18 @@ export default async function AdminPage({
   const initialProductsPricesFilters = parseProductsPricesFilters(sp);
   const selectedOrder = typeof sp.order === "string" && sp.order.trim() !== "" ? sp.order.trim() : null;
   const ordersPage = Math.max(1, parseInt(sp.ordersPage ?? "1", 10) || 1);
-  const ordersPageSize = Math.min(
-    100,
-    Math.max(5, parseInt(sp.ordersPageSize ?? "20", 10) || 20),
-  );
+  const ordersPageSizeRaw =
+    parseInt(sp.ordersPageSize ?? String(ORDERS_DEFAULT_PAGE_SIZE), 10) ||
+    ORDERS_DEFAULT_PAGE_SIZE;
+  const ordersPageSize = ORDERS_PAGE_SIZES.has(ordersPageSizeRaw)
+    ? ordersPageSizeRaw
+    : ORDERS_DEFAULT_PAGE_SIZE;
+  const ordersStoresFilterRaw = sp.ordersStores ?? sp.ordersStore ?? "";
+  const ordersStoresFilterParsed = parseOrdersStoresParam(ordersStoresFilterRaw);
+  const ordersStatusFilter: OrderStatusUi | null =
+    sp.ordersStatus && isOrderStatusUi(sp.ordersStatus) ? sp.ordersStatus : null;
+  const ordersSortRaw = sp.ordersSort ?? "date-desc";
+  const ordersSort = ORDERS_SORT_VALUES.has(ordersSortRaw) ? ordersSortRaw : "date-desc";
 
   const commissionPage = Math.max(1, parseInt(sp.commissionPage ?? "1", 10) || 1);
   const commissionPageSize = Math.min(
@@ -1168,15 +1184,54 @@ export default async function AdminPage({
         ...order,
         model_summary,
         status: normalizeOverallOrderStatus(statuses),
+        grand_total: orderGrandTotal(order),
       };
     })
     .sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
 
-  const totalOrders = allOrders.length;
+  const knownStoreNames = new Set([
+    ...stores.map((s) => s.name),
+    ...allOrders.map((o) => o.store_name?.trim()).filter(Boolean),
+  ] as string[]);
+  const ordersStoresFilter = ordersStoresFilterParsed.filter((name) =>
+    knownStoreNames.has(name),
+  );
+
+  let filteredOrders = allOrders;
+  if (ordersStoresFilter.length > 0) {
+    const selected = new Set(ordersStoresFilter);
+    filteredOrders = filteredOrders.filter((o) => selected.has(o.store_name));
+  }
+  if (ordersStatusFilter) {
+    filteredOrders = filteredOrders.filter((o) =>
+      orderMatchesStatusFilter(o.status, ordersStatusFilter),
+    );
+  }
+
+  filteredOrders = [...filteredOrders].sort((a, b) => {
+    switch (ordersSort) {
+      case "date-asc":
+        return a.created_at.localeCompare(b.created_at);
+      case "store-asc": {
+        const byStore = a.store_name.localeCompare(b.store_name, "fr");
+        return byStore !== 0 ? byStore : b.created_at.localeCompare(a.created_at);
+      }
+      case "store-desc": {
+        const byStore = b.store_name.localeCompare(a.store_name, "fr");
+        return byStore !== 0 ? byStore : b.created_at.localeCompare(a.created_at);
+      }
+      case "date-desc":
+      default:
+        return b.created_at.localeCompare(a.created_at);
+    }
+  });
+
+  const totalOrders = filteredOrders.length;
+  const totalOrdersAll = allOrders.length;
   const totalOrdersPages = Math.max(1, Math.ceil(totalOrders / ordersPageSize));
   const safeOrdersPage = Math.min(ordersPage, totalOrdersPages);
   const ordersStart = (safeOrdersPage - 1) * ordersPageSize;
-  const orders = allOrders.slice(ordersStart, ordersStart + ordersPageSize);
+  const orders = filteredOrders.slice(ordersStart, ordersStart + ordersPageSize);
 
   const orderSubmissions =
     section === "demandes" && selectedOrder
@@ -1192,7 +1247,11 @@ export default async function AdminPage({
       ordersPage={safeOrdersPage}
       ordersPageSize={ordersPageSize}
       totalOrders={totalOrders}
+      totalOrdersAll={totalOrdersAll}
       totalOrdersPages={totalOrdersPages}
+      ordersStoresFilter={ordersStoresFilter}
+      ordersStatusFilter={ordersStatusFilter}
+      ordersSort={ordersSort}
       selectedOrder={section === "demandes" ? selectedOrder : null}
       orderSubmissions={orderSubmissions}
       adminUsers={adminUsers}

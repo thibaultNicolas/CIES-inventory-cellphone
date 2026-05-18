@@ -1,7 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { Filter, Trash2 } from "lucide-react";
 import type { AppRole } from "@/lib/app-role";
 import { hasMinRole } from "@/lib/app-role";
 import {
@@ -15,7 +16,16 @@ import {
 import { useI18n } from "@/contexts/I18nContext";
 import { deleteOrder } from "../../actions/delete-order";
 import { updateOrderStatus } from "../../actions/update-order-status";
-import type { SubmissionStatus } from "@/lib/submissions";
+import { updateOrderStore } from "../../actions/update-order-store";
+import { orderGrandTotal, type SubmissionStatus } from "@/lib/submissions";
+import {
+  ORDER_STATUS_BADGE_CLASS,
+  orderStatusUiToDb,
+  serializeOrdersStoresParam,
+  toOrderStatusUi,
+  type OrderStatusUi,
+} from "@/lib/order-status";
+import { cn } from "@/lib/utils";
 
 export type OrderSummary = {
   /** request_group_id when available, otherwise fallback to submission id */
@@ -23,6 +33,8 @@ export type OrderSummary = {
   created_at: string;
   model_summary: string;
   gross_total: number;
+  /** Prix de rachat + toutes les commissions. */
+  grand_total: number;
   customer_name: string;
   customer_email: string;
   customer_phone: string;
@@ -37,29 +49,70 @@ export type OrderSummary = {
   commission_owner_total?: number | null;
 };
 
-const STATUS_LABEL_KEY: Record<
-  SubmissionStatus,
-  "statusUnprocessed" | "statusLabelSent" | "statusPaid" | "statusCancelled"
+const ORDERS_PAGE_SIZE_OPTIONS = [20, 50, 100, 500, 1000] as const;
+
+const thCompact = "h-9 px-2 py-1.5 text-xs font-medium sm:px-3";
+const tdCompact = "px-2 py-1.5 text-xs sm:px-3";
+const tdMoney = cn(tdCompact, "text-right tabular-nums whitespace-nowrap");
+const stickyLeadBase =
+  "sticky z-10 bg-background group-hover:bg-foreground/5";
+const stickyCheckboxCol = cn(stickyLeadBase, "left-0");
+const stickyStatusCol = cn(
+  stickyLeadBase,
+  "left-8 shadow-[4px_0_10px_-6px_rgba(0,0,0,0.08)]",
+);
+const stickyActionsCol = cn(
+  stickyLeadBase,
+  "left-[7.75rem] shadow-[4px_0_10px_-6px_rgba(0,0,0,0.08)]",
+);
+const actionBtn =
+  "inline-flex items-center justify-center rounded-card border border-transparent bg-[#F5F5F4] px-2 py-1 text-[11px] font-medium leading-tight text-foreground transition-colors hover:border-brand-primary/40 hover:bg-brand-primary/5";
+
+const ORDER_STATUS_LABEL_KEY: Record<
+  OrderStatusUi,
+  "orderStatusPending" | "orderStatusPaid" | "orderStatusCancelled"
 > = {
-  unprocessed: "statusUnprocessed",
-  label_sent: "statusLabelSent",
-  paid: "statusPaid",
-  cancelled: "statusCancelled",
+  pending: "orderStatusPending",
+  paid: "orderStatusPaid",
+  cancelled: "orderStatusCancelled",
 };
+
+export type OrdersSort = "date-desc" | "date-asc" | "store-asc" | "store-desc";
 
 type OrdersTableProps = {
   orders: OrderSummary[];
   page: number;
   pageSize: number;
   total: number;
+  totalAll: number;
   totalPages: number;
+  storesFilter: string[];
+  statusFilter: OrderStatusUi | null;
+  sort: string;
+  stores: { id: string; name: string }[];
   viewerRole: AppRole;
   canManagePaymentsAndCommissions: boolean;
 };
 
+const filterSelectClass =
+  "rounded-card border border-foreground/15 bg-[#F5F5F4] px-2.5 py-1.5 text-xs text-foreground sm:text-sm focus:border-brand-primary focus:bg-background focus:outline-none";
+
 type EditableOrderRow = OrderSummary & {
   status: SubmissionStatus;
 };
+
+function OrderStatusBadge({ ui, label }: { ui: OrderStatusUi; label: string }) {
+  return (
+    <span
+      className={cn(
+        "inline-block whitespace-nowrap rounded-full border px-2.5 py-0.5 text-[11px] font-semibold leading-tight",
+        ORDER_STATUS_BADGE_CLASS[ui],
+      )}
+    >
+      {label}
+    </span>
+  );
+}
 
 function formatDate(dateString: string, locale: string) {
   const date = new Date(dateString);
@@ -77,34 +130,47 @@ export function OrdersTable({
   page,
   pageSize,
   total,
+  totalAll,
   totalPages,
+  storesFilter,
+  statusFilter,
+  sort,
+  stores,
   viewerRole,
   canManagePaymentsAndCommissions,
 }: OrdersTableProps) {
   const { t, locale } = useI18n();
   const router = useRouter();
+  const [isPending, startTransition] = useTransition();
   const canCancelOrder = hasMinRole(viewerRole, "admin");
+  const canEditStore = hasMinRole(viewerRole, "admin");
   const canDeleteOrder = viewerRole === "super_admin";
   const [deletingOrderId, setDeletingOrderId] = useState<string | null>(null);
+  const [updatingStoreOrderId, setUpdatingStoreOrderId] = useState<string | null>(null);
   const [ordersState, setOrdersState] = useState<EditableOrderRow[]>(() =>
     orders.map((o) => ({ ...o })),
   );
+
+  useEffect(() => {
+    setOrdersState(orders.map((o) => ({ ...o })));
+  }, [orders]);
   const [selectedOrderIds, setSelectedOrderIds] = useState<string[]>([]);
-  const [bulkStatus, setBulkStatus] = useState<SubmissionStatus>("unprocessed");
+  const [bulkStatus, setBulkStatus] = useState<OrderStatusUi>("pending");
   const [isBulkUpdating, setIsBulkUpdating] = useState(false);
 
-  const sorted = useMemo(() => {
-    return [...ordersState].sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
-  }, [ordersState]);
+  const sorted = ordersState;
+
+  const hasActiveFilters = Boolean(
+    storesFilter.length > 0 || statusFilter || sort !== "date-desc",
+  );
 
   /** Traitement par lot (super admin) : statuts modifiables depuis le détail ou ici. */
   const statusOptions = useMemo(
     () =>
       [
-        { value: "unprocessed" as const, label: t.admin.statusPendingPayment },
-        { value: "label_sent" as const, label: t.admin.statusLabelSent },
-        { value: "paid" as const, label: t.admin.statusPaid },
-        { value: "cancelled" as const, label: t.admin.statusCancelled },
+        { value: "pending" as const, label: t.admin.orderStatusPending },
+        { value: "paid" as const, label: t.admin.orderStatusPaid },
+        { value: "cancelled" as const, label: t.admin.orderStatusCancelled },
       ] as const,
     [t.admin],
   );
@@ -115,8 +181,11 @@ export function OrdersTable({
       currency: "CAD",
     }).format(Number.isFinite(amount) ? amount : 0);
 
-  const handleStatusChange = async (orderId: string, newStatus: SubmissionStatus) => {
-    const result = await updateOrderStatus({ orderId, status: newStatus });
+  const handleStatusChange = async (orderId: string, newStatus: OrderStatusUi) => {
+    const result = await updateOrderStatus({
+      orderId,
+      status: orderStatusUiToDb(newStatus),
+    });
     if (!result.success) {
       alert(
         result.error === "Forbidden"
@@ -125,14 +194,35 @@ export function OrdersTable({
       );
       return;
     }
-    setOrdersState((prev) => prev.map((o) => (o.orderId === orderId ? { ...o, status: newStatus } : o)));
+    const dbStatus = orderStatusUiToDb(newStatus);
+    setOrdersState((prev) =>
+      prev.map((o) => (o.orderId === orderId ? { ...o, status: dbStatus } : o)),
+    );
+    router.refresh();
+  };
+
+  const handleStoreChange = async (orderId: string, storeName: string) => {
+    if (!canEditStore || !storeName) return;
+    setUpdatingStoreOrderId(orderId);
+    const result = await updateOrderStore({ orderId, storeName });
+    setUpdatingStoreOrderId(null);
+    if (!result.success) {
+      alert(result.error || t.admin.errorUpdateStore);
+      return;
+    }
+    setOrdersState((prev) =>
+      prev.map((o) =>
+        o.orderId === orderId ? { ...o, store_name: result.storeName ?? storeName } : o,
+      ),
+    );
+    router.refresh();
   };
 
   const handleMarkCancelled = async (orderId: string) => {
     if (!canCancelOrder) return;
     const ok = confirm(t.admin.orderMarkCancelledConfirm);
     if (!ok) return;
-    await handleStatusChange(orderId, "cancelled");
+    await handleStatusChange(orderId, "cancelled" satisfies OrderStatusUi);
   };
 
   const allSelected = sorted.length > 0 && selectedOrderIds.length === sorted.length;
@@ -152,8 +242,9 @@ export function OrdersTable({
     setIsBulkUpdating(true);
     const failures: string[] = [];
 
+    const bulkDbStatus = orderStatusUiToDb(bulkStatus);
     for (const orderId of selectedOrderIds) {
-      const result = await updateOrderStatus({ orderId, status: bulkStatus });
+      const result = await updateOrderStatus({ orderId, status: bulkDbStatus });
       if (!result.success) {
         failures.push(orderId);
       }
@@ -166,27 +257,196 @@ export function OrdersTable({
     }
 
     setOrdersState((prev) =>
-      prev.map((o) => (selectedOrderIds.includes(o.orderId) ? { ...o, status: bulkStatus } : o)),
+      prev.map((o) =>
+        selectedOrderIds.includes(o.orderId) ? { ...o, status: bulkDbStatus } : o,
+      ),
     );
     setSelectedOrderIds([]);
+    router.refresh();
+  };
+
+  const pushOrdersListUrl = (updates: {
+    page?: number;
+    pageSize?: number;
+    stores?: string[];
+    status?: OrderStatusUi | null;
+    sort?: OrdersSort;
+  }) => {
+    if (typeof window === "undefined") return;
+    const nextPage = updates.page ?? page;
+    const nextPageSize = updates.pageSize ?? pageSize;
+    const nextStores = updates.stores !== undefined ? updates.stores : storesFilter;
+    const nextStatus = updates.status !== undefined ? updates.status : statusFilter;
+    const nextSort = (updates.sort ?? sort) as OrdersSort;
+
+    const safePage = Math.max(1, nextPage);
+    const url = new URL(window.location.href);
+    url.searchParams.set("section", "demandes");
+    url.searchParams.set("ordersPage", String(safePage));
+    url.searchParams.set("ordersPageSize", String(nextPageSize));
+
+    url.searchParams.delete("ordersStore");
+    if (nextStores.length > 0) {
+      url.searchParams.set("ordersStores", serializeOrdersStoresParam(nextStores));
+    } else {
+      url.searchParams.delete("ordersStores");
+    }
+
+    if (nextStatus) url.searchParams.set("ordersStatus", nextStatus);
+    else url.searchParams.delete("ordersStatus");
+
+    if (nextSort && nextSort !== "date-desc") url.searchParams.set("ordersSort", nextSort);
+    else url.searchParams.delete("ordersSort");
+
+    url.searchParams.delete("order");
+
+    startTransition(() => {
+      router.replace(
+        url.pathname +
+          (url.searchParams.toString() ? `?${url.searchParams.toString()}` : ""),
+      );
+    });
+  };
+
+  const toggleStoreFilter = (storeName: string) => {
+    const next = storesFilter.includes(storeName)
+      ? storesFilter.filter((name) => name !== storeName)
+      : [...storesFilter, storeName];
+    pushOrdersListUrl({ page: 1, stores: next });
   };
 
   const goToPage = (nextPage: number) => {
-    if (typeof window === "undefined") return;
-    const safe = Math.max(1, Math.min(totalPages, nextPage));
-    const url = new URL(window.location.href);
-    url.searchParams.set("section", "demandes");
-    url.searchParams.set("ordersPage", String(safe));
-    url.searchParams.set("ordersPageSize", String(pageSize));
-    url.searchParams.delete("order");
-    router.replace(
-      url.pathname +
-        (url.searchParams.toString() ? `?${url.searchParams.toString()}` : ""),
-    );
+    pushOrdersListUrl({ page: nextPage });
+  };
+
+  const changePageSize = (nextPageSize: number) => {
+    pushOrdersListUrl({ page: 1, pageSize: nextPageSize });
+  };
+
+  const resetFilters = () => {
+    pushOrdersListUrl({ page: 1, stores: [], status: null, sort: "date-desc" });
   };
 
   return (
     <div className="w-full min-w-0 max-w-full rounded-card border border-foreground/10 bg-background shadow-soft">
+      <section className="space-y-3 border-b border-foreground/10 px-3 py-3 sm:px-6 sm:py-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h3 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.08em] text-foreground/70 sm:text-sm">
+            <Filter className="h-4 w-4 shrink-0" />
+            {t.admin.filters}
+          </h3>
+          {hasActiveFilters ? (
+            <button
+              type="button"
+              onClick={resetFilters}
+              disabled={isPending}
+              className="text-xs font-medium text-brand-primary hover:underline disabled:opacity-50"
+            >
+              {t.admin.resetFilters}
+            </button>
+          ) : null}
+        </div>
+        <div className="w-full space-y-3">
+          <div className="space-y-2">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="text-xs font-medium text-foreground/70">
+                {t.admin.filterStoresSelection}
+              </span>
+              {storesFilter.length > 0 ? (
+                <button
+                  type="button"
+                  onClick={() => pushOrdersListUrl({ page: 1, stores: [] })}
+                  disabled={isPending}
+                  className="text-xs font-medium text-brand-primary hover:underline disabled:opacity-50"
+                >
+                  {t.admin.allStoresFilter}
+                </button>
+              ) : null}
+            </div>
+            <div className="flex flex-wrap gap-1.5 sm:gap-2">
+              {stores.map((store) => {
+                const checked = storesFilter.includes(store.name);
+                return (
+                  <label
+                    key={store.id}
+                    className={cn(
+                      "inline-flex cursor-pointer items-center gap-1.5 rounded-card border px-2.5 py-1.5 text-xs transition-colors",
+                      checked
+                        ? "border-brand-primary/40 bg-brand-primary/10 font-medium text-brand-primary"
+                        : "border-foreground/15 bg-[#F5F5F4] text-foreground/80 hover:border-foreground/25",
+                      isPending && "pointer-events-none opacity-60",
+                    )}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      disabled={isPending}
+                      onChange={() => toggleStoreFilter(store.name)}
+                      className="h-3.5 w-3.5 rounded border-foreground/25"
+                    />
+                    {store.name}
+                  </label>
+                );
+              })}
+            </div>
+            {storesFilter.length > 0 ? (
+              <p className="text-xs text-foreground/55">
+                {storesFilter.length} {t.admin.storesSelectedCount}
+              </p>
+            ) : null}
+          </div>
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+          <label className="flex items-center gap-1.5 text-xs text-foreground/70">
+            <span className="font-medium">{t.admin.filterByOrderStatus}</span>
+            <select
+              value={statusFilter ?? "all"}
+              onChange={(e) =>
+                pushOrdersListUrl({
+                  page: 1,
+                  status:
+                    e.target.value === "all" ? null : (e.target.value as OrderStatusUi),
+                })
+              }
+              disabled={isPending}
+              className={filterSelectClass}
+              aria-label={t.admin.filterByOrderStatus}
+            >
+              <option value="all">{t.admin.allStatuses}</option>
+              {statusOptions.map((status) => (
+                <option key={status.value} value={status.value}>
+                  {status.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex items-center gap-1.5 text-xs text-foreground/70">
+            <span className="font-medium">{t.admin.ordersSortBy}</span>
+            <select
+              value={sort}
+              onChange={(e) =>
+                pushOrdersListUrl({ page: 1, sort: e.target.value as OrdersSort })
+              }
+              disabled={isPending}
+              className={filterSelectClass}
+              aria-label={t.admin.ordersSortBy}
+            >
+              <option value="date-desc">{t.admin.sortDateDesc}</option>
+              <option value="date-asc">{t.admin.sortDateAsc}</option>
+              <option value="store-asc">{t.admin.sortStoreAsc}</option>
+              <option value="store-desc">{t.admin.sortStoreDesc}</option>
+            </select>
+          </label>
+          </div>
+        </div>
+        <p className="text-xs text-foreground/55">
+          {total} {t.admin.ordersFilteredCount}
+          {total !== totalAll ? ` (${totalAll} ${locale === "en" ? "total" : "au total"})` : null}
+        </p>
+        {isPending ? (
+          <p className="text-xs font-medium text-brand-primary">{t.admin.reportLoading}</p>
+        ) : null}
+      </section>
+
       {canManagePaymentsAndCommissions ? (
         <div className="flex items-center justify-between gap-3 border-b border-foreground/10 px-3 py-3 sm:px-6">
           <label className="inline-flex items-center gap-2 text-xs text-foreground/70 sm:text-sm">
@@ -207,7 +467,7 @@ export function OrdersTable({
             ) : null}
             <select
               value={bulkStatus}
-              onChange={(e) => setBulkStatus(e.target.value as SubmissionStatus)}
+              onChange={(e) => setBulkStatus(e.target.value as OrderStatusUi)}
               className="rounded-card border border-foreground/15 bg-background px-2 py-1 text-xs text-foreground sm:text-sm"
             >
               {statusOptions.map((status) => (
@@ -228,103 +488,74 @@ export function OrdersTable({
         </div>
       ) : null}
 
-      <div className="overflow-x-auto overflow-y-visible">
-      <Table className="min-w-[1700px] whitespace-nowrap">
+      <div className="min-w-0 max-w-full">
+      <Table className="min-w-[1360px] whitespace-nowrap text-xs [&_td]:py-1.5 [&_th]:h-9">
         <TableHeader>
           <TableRow>
-            <TableHead className="w-10 px-3 sm:px-4">
+            <TableHead className={cn(thCompact, "w-8", stickyCheckboxCol)}>
               {canManagePaymentsAndCommissions ? (
                 <input
                   type="checkbox"
                   checked={allSelected}
                   onChange={toggleSelectAll}
-                  className="h-4 w-4 rounded border-foreground/20"
+                  className="h-3.5 w-3.5 rounded border-foreground/20"
                   aria-label={t.admin.selectAllOrders}
                 />
               ) : null}
             </TableHead>
-            <TableHead className="px-3 sm:px-6">{t.admin.date}</TableHead>
-            <TableHead className="px-3 sm:px-6">{t.admin.orderNumber}</TableHead>
-            <TableHead className="px-3 sm:px-6">{t.admin.client}</TableHead>
-            <TableHead className="px-3 sm:px-6">{t.admin.modelLabel}</TableHead>
-            <TableHead className="text-right px-3 sm:px-6">{t.admin.grossBeforeCommission}</TableHead>
-            <TableHead className="text-right px-3 sm:px-6">{t.admin.employeeCommission}</TableHead>
-            <TableHead className="text-right px-3 sm:px-6">{t.admin.managerCommission}</TableHead>
-            <TableHead className="text-right px-3 sm:px-6">{t.admin.ownerCommission}</TableHead>
-            <TableHead className="text-right px-3 sm:px-6">{t.admin.totalLabel}</TableHead>
-            <TableHead className="text-center px-3 sm:px-6">{t.admin.status}</TableHead>
-            <TableHead className="text-right px-3 sm:px-6">{t.admin.actions}</TableHead>
+            <TableHead className={cn(thCompact, stickyStatusCol, "text-center")}>
+              {t.admin.status}
+            </TableHead>
+            <TableHead className={cn(thCompact, stickyActionsCol, "text-right")}>
+              {t.admin.actions}
+            </TableHead>
+            <TableHead className={thCompact}>{t.admin.date}</TableHead>
+            <TableHead className={thCompact}>{t.admin.storeNameLabel}</TableHead>
+            <TableHead className={thCompact}>{t.admin.orderNumber}</TableHead>
+            <TableHead className={thCompact}>{t.admin.client}</TableHead>
+            <TableHead className={thCompact}>{t.admin.modelLabel}</TableHead>
+            <TableHead className={cn(thCompact, "text-right")}>{t.admin.colPrice}</TableHead>
+            <TableHead className={cn(thCompact, "text-right")}>{t.admin.colEmployee}</TableHead>
+            <TableHead className={cn(thCompact, "text-right")}>{t.admin.colManager}</TableHead>
+            <TableHead className={cn(thCompact, "text-right")}>{t.admin.colOwner}</TableHead>
+            <TableHead className={cn(thCompact, "text-right")}>{t.admin.totalLabel}</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {sorted.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={12} className="px-3 py-6 text-center text-foreground/60 sm:px-6">
+              <TableCell colSpan={13} className="px-3 py-4 text-center text-foreground/60">
                 {t.admin.noSubmissions}
               </TableCell>
             </TableRow>
           ) : (
             sorted.map((order) => (
-              <TableRow
-                key={order.orderId}
-                className="hover:bg-foreground/5"
-              >
-                <TableCell className="px-3 py-3 sm:px-4 sm:py-4" onClick={(e) => e.stopPropagation()}>
+              <TableRow key={order.orderId} className="group hover:bg-foreground/5">
+                <TableCell
+                  className={cn(tdCompact, stickyCheckboxCol)}
+                  onClick={(e) => e.stopPropagation()}
+                >
                   {canManagePaymentsAndCommissions ? (
                     <input
                       type="checkbox"
                       checked={selectedOrderIds.includes(order.orderId)}
                       onChange={() => toggleSelectOrder(order.orderId)}
-                      className="h-4 w-4 rounded border-foreground/20"
+                      className="h-3.5 w-3.5 rounded border-foreground/20"
                       aria-label={`select-${order.orderId}`}
                     />
                   ) : null}
                 </TableCell>
-                <TableCell className="whitespace-nowrap px-3 py-3 text-sm text-foreground/70 sm:px-6 sm:py-4">
-                  {formatDate(order.created_at, locale)}
-                </TableCell>
-                <TableCell className="whitespace-nowrap px-3 py-3 text-sm sm:px-6 sm:py-4">
-                  <span className="font-mono text-foreground/80">
-                    {order.orderId.slice(0, 8).toUpperCase()}
-                  </span>
-                </TableCell>
-                <TableCell className="px-3 py-3 sm:px-6 sm:py-4">
-                  <div className="font-medium text-foreground">{order.customer_name}</div>
-                </TableCell>
-                <TableCell className="px-3 py-3 text-sm sm:px-6 sm:py-4">
-                  {order.model_summary || "—"}
-                </TableCell>
-                <TableCell className="whitespace-nowrap px-3 py-3 text-right text-sm tabular-nums sm:px-6 sm:py-4">
-                  {formatMoney(order.gross_total)}
-                </TableCell>
-                <TableCell className="px-3 py-3 text-right sm:px-6 sm:py-4" onClick={(e) => e.stopPropagation()}>
-                  <span className="font-medium tabular-nums">
-                    {formatMoney(Number(order.commission_employee_total ?? 0))}
-                  </span>
-                </TableCell>
-                <TableCell className="px-3 py-3 text-right sm:px-6 sm:py-4" onClick={(e) => e.stopPropagation()}>
-                  <span className="font-medium tabular-nums">
-                    {formatMoney(Number(order.commission_manager_total ?? 0))}
-                  </span>
-                </TableCell>
-                <TableCell className="px-3 py-3 text-right sm:px-6 sm:py-4" onClick={(e) => e.stopPropagation()}>
-                  <span className="font-medium tabular-nums">
-                    {formatMoney(Number(order.commission_owner_total ?? 0))}
-                  </span>
-                </TableCell>
-                <TableCell className="whitespace-nowrap px-3 py-3 text-right text-sm font-semibold tabular-nums sm:px-6 sm:py-4">
-                  {formatMoney(order.gross_total)}
-                </TableCell>
                 <TableCell
-                  className="text-center px-3 py-3 sm:px-6 sm:py-4"
+                  className={cn(tdCompact, stickyStatusCol, "text-center")}
                   onClick={(e) => e.stopPropagation()}
                 >
-                  <span className="inline-block min-w-[140px] rounded-card border border-foreground/15 bg-[#F5F5F4] px-3 py-2 text-xs font-medium text-foreground">
-                    {t.admin[STATUS_LABEL_KEY[order.status]]}
-                  </span>
+                  <OrderStatusBadge
+                    ui={toOrderStatusUi(order.status)}
+                    label={t.admin[ORDER_STATUS_LABEL_KEY[toOrderStatusUi(order.status)]]}
+                  />
                 </TableCell>
-                <TableCell className="text-right px-3 py-3 sm:px-6 sm:py-4">
-                  <div className="inline-flex flex-wrap items-center justify-end gap-2">
+                <TableCell className={cn(tdCompact, stickyActionsCol, "text-right")}>
+                  <div className="inline-flex flex-nowrap items-center justify-end gap-1">
                     <button
                       type="button"
                       onClick={(e) => {
@@ -333,7 +564,7 @@ export function OrdersTable({
                           `/admin?section=demandes&order=${encodeURIComponent(order.orderId)}`,
                         );
                       }}
-                      className="inline-flex items-center justify-center rounded-card border-2 border-transparent bg-[#F5F5F4] px-4 py-2 text-xs font-medium text-foreground transition-all duration-300 hover:border-brand-primary hover:bg-brand-primary/5 hover:scale-105"
+                      className={actionBtn}
                     >
                       {t.admin.view}
                     </button>
@@ -345,7 +576,10 @@ export function OrdersTable({
                           void handleMarkCancelled(order.orderId);
                         }}
                         disabled={order.status === "cancelled"}
-                        className="inline-flex items-center justify-center rounded-card border-2 border-transparent bg-[#F5F5F4] px-4 py-2 text-xs font-medium text-foreground transition-all duration-300 hover:border-amber-500/50 hover:bg-amber-500/5 hover:scale-105 disabled:cursor-not-allowed disabled:opacity-45"
+                        className={cn(
+                          actionBtn,
+                          "hover:border-amber-500/50 hover:bg-amber-500/5 disabled:cursor-not-allowed disabled:opacity-45",
+                        )}
                       >
                         {t.admin.orderMarkCancelled}
                       </button>
@@ -367,13 +601,86 @@ export function OrdersTable({
                           router.refresh();
                         }}
                         disabled={deletingOrderId === order.orderId}
-                        className="inline-flex items-center justify-center rounded-card border border-red-500/30 bg-red-500/5 px-4 py-2 text-xs font-medium text-red-700 transition-colors hover:bg-red-500/10 disabled:opacity-50"
+                        className={cn(
+                          actionBtn,
+                          "h-7 w-7 shrink-0 border-red-500/30 bg-red-500/5 px-0 text-red-700 hover:border-red-500/40 hover:bg-red-500/10",
+                        )}
                         aria-label={t.admin.deleteOrder}
+                        title={t.admin.deleteOrder}
                       >
-                        {deletingOrderId === order.orderId ? "…" : t.admin.deleteOrder}
+                        {deletingOrderId === order.orderId ? (
+                          <span className="text-xs">…</span>
+                        ) : (
+                          <Trash2 className="h-3.5 w-3.5" aria-hidden />
+                        )}
                       </button>
                     ) : null}
                   </div>
+                </TableCell>
+                <TableCell className={cn(tdCompact, "whitespace-nowrap text-foreground/70")}>
+                  {formatDate(order.created_at, locale)}
+                </TableCell>
+                <TableCell
+                  className={cn(tdCompact, "max-w-[140px]")}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {canEditStore ? (
+                    <select
+                      value={order.store_name || ""}
+                      disabled={updatingStoreOrderId === order.orderId}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        if (v) void handleStoreChange(order.orderId, v);
+                      }}
+                      className={cn(
+                        filterSelectClass,
+                        "max-w-full font-medium text-brand-primary",
+                        !order.store_name && "border-amber-300 bg-amber-50",
+                      )}
+                      aria-label={t.admin.assignStore}
+                    >
+                      <option value="" disabled>
+                        {t.admin.selectStore}
+                      </option>
+                      {order.store_name &&
+                      !stores.some((s) => s.name === order.store_name) ? (
+                        <option value={order.store_name}>{order.store_name}</option>
+                      ) : null}
+                      {stores.map((store) => (
+                        <option key={store.id} value={store.name}>
+                          {store.name}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <span className="font-medium text-brand-primary">
+                      {order.store_name || "—"}
+                    </span>
+                  )}
+                </TableCell>
+                <TableCell className={cn(tdCompact, "whitespace-nowrap")}>
+                  <span className="font-mono text-foreground/80">
+                    {order.orderId.slice(0, 8).toUpperCase()}
+                  </span>
+                </TableCell>
+                <TableCell className={cn(tdCompact, "max-w-[130px] truncate font-medium")}>
+                  {order.customer_name}
+                </TableCell>
+                <TableCell className={cn(tdCompact, "max-w-[110px] truncate")}>
+                  {order.model_summary || "—"}
+                </TableCell>
+                <TableCell className={tdMoney}>{formatMoney(order.gross_total)}</TableCell>
+                <TableCell className={tdMoney} onClick={(e) => e.stopPropagation()}>
+                  {formatMoney(Number(order.commission_employee_total ?? 0))}
+                </TableCell>
+                <TableCell className={tdMoney} onClick={(e) => e.stopPropagation()}>
+                  {formatMoney(Number(order.commission_manager_total ?? 0))}
+                </TableCell>
+                <TableCell className={tdMoney} onClick={(e) => e.stopPropagation()}>
+                  {formatMoney(Number(order.commission_owner_total ?? 0))}
+                </TableCell>
+                <TableCell className={cn(tdMoney, "font-semibold")}>
+                  {formatMoney(orderGrandTotal(order))}
                 </TableCell>
               </TableRow>
             ))
@@ -381,11 +688,23 @@ export function OrdersTable({
         </TableBody>
       </Table>
       </div>
-      <div className="flex items-center justify-between border-t border-foreground/10 px-3 py-3 text-xs text-foreground/70 sm:px-6 sm:text-sm">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-foreground/10 px-3 py-3 text-xs text-foreground/70 sm:px-6 sm:text-sm">
         <span>
           {total} {locale === "en" ? "orders" : "commandes"}
         </span>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <select
+            value={pageSize}
+            onChange={(e) => changePageSize(Number(e.target.value))}
+            className="rounded-card border border-foreground/15 bg-background px-2 py-1.5 text-xs text-foreground sm:px-3 sm:text-sm"
+            aria-label={locale === "en" ? "Rows per page" : "Lignes par page"}
+          >
+            {ORDERS_PAGE_SIZE_OPTIONS.map((n) => (
+              <option key={n} value={n}>
+                {n}/page
+              </option>
+            ))}
+          </select>
           <button
             type="button"
             onClick={() => goToPage(page - 1)}

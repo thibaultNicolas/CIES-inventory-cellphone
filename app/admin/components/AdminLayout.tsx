@@ -27,6 +27,7 @@ import {
   BarChart3,
   Wallet,
 } from "lucide-react";
+import type { OrderStatusUi } from "@/lib/order-status";
 import type { SubmissionStatus } from "@/lib/submissions";
 import type { AppRole } from "@/lib/app-role";
 import { canManagePaymentsAndCommissions, hasMinRole } from "@/lib/app-role";
@@ -159,7 +160,11 @@ type AdminLayoutProps = {
   ordersPage: number;
   ordersPageSize: number;
   totalOrders: number;
+  totalOrdersAll: number;
   totalOrdersPages: number;
+  ordersStoresFilter: string[];
+  ordersStatusFilter: OrderStatusUi | null;
+  ordersSort: string;
   selectedOrder?: string | null;
   orderSubmissions?: Submission[];
   adminUsers: AdminUser[];
@@ -185,7 +190,11 @@ export function AdminLayout({
   ordersPage,
   ordersPageSize,
   totalOrders,
+  totalOrdersAll,
   totalOrdersPages,
+  ordersStoresFilter,
+  ordersStatusFilter,
+  ordersSort,
   selectedOrder = null,
   orderSubmissions = [],
   adminUsers,
@@ -436,18 +445,24 @@ export function AdminLayout({
                 <OrderDetail
                   orderId={selectedOrder}
                   submissions={orderSubmissions}
+                  stores={stores}
                   canManagePaymentsAndCommissions={canManageFinancials}
                   viewerRole={viewerRole}
                 />
               ) : (
                 <>
                   <OrdersTable
-                    key={`${ordersPage}-${ordersPageSize}-${orders.map((o) => o.orderId).join(",")}`}
+                    key={`${ordersPage}-${ordersPageSize}-${ordersStoresFilter.join(",")}-${ordersStatusFilter}-${ordersSort}-${orders.map((o) => o.orderId).join(",")}`}
                     orders={orders}
                     page={ordersPage}
                     pageSize={ordersPageSize}
                     total={totalOrders}
+                    totalAll={totalOrdersAll}
                     totalPages={totalOrdersPages}
+                    storesFilter={ordersStoresFilter}
+                    statusFilter={ordersStatusFilter}
+                    sort={ordersSort}
+                    stores={stores}
                     viewerRole={viewerRole}
                     canManagePaymentsAndCommissions={canManageFinancials}
                   />
