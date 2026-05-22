@@ -20,6 +20,7 @@ export function buildStoreCashflowSnapshot(
     price: number;
     quantity: number;
     status: SubmissionStatus;
+    commission_paid: boolean;
   }>,
   stores: ReadonlyArray<{
     id: string;
@@ -58,12 +59,13 @@ export function buybackOutflowByStoreName(
     price: number;
     quantity: number;
     status: SubmissionStatus;
+    commission_paid: boolean;
   }>,
 ): Map<string, number> {
   const map = new Map<string, number>();
   for (const s of submissions) {
     const name = typeof s.store_name === "string" ? s.store_name.trim() : "";
-    if (!name || s.status === "cancelled") continue;
+    if (!name || s.status === "cancelled" || !s.commission_paid) continue;
     const line = submissionLineTotal(s.price, s.quantity);
     map.set(name, (map.get(name) ?? 0) + line);
   }

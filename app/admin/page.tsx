@@ -11,13 +11,24 @@ import type { ProductsPricesFiltersInit } from "./components/ProductsManager";
 import { buildStoreCashflowSnapshot } from "@/lib/petty-cash";
 import { getStaff, requireAdmin } from "@/lib/admin-auth";
 import { parseAppRole, type AppRole } from "@/lib/app-role";
-import { applyCommissionFilters, applyReceivableFilters } from "@/lib/commission-filters";
+import {
+  applyCommissionFilters,
+  applyReceivableFilters,
+  excludeCancelledSubmissions,
+} from "@/lib/commission-filters";
+import {
+  fetchCommissionFilterDebug,
+  type CommissionFilterDebugSnapshot,
+} from "@/lib/commission-filter-debug";
 import { submissionMonthKey } from "@/lib/report-dates";
 import { redirect } from "next/navigation";
+
+export const dynamic = "force-dynamic";
 import {
   isOrderStatusUi,
-  normalizeOverallOrderStatus,
+  normalizeOverallOrderPaymentStatus,
   orderMatchesStatusFilter,
+  orderStatusUiToDb,
   parseOrdersStoresParam,
   type OrderStatusUi,
 } from "@/lib/order-status";
@@ -93,6 +104,8 @@ type SearchParams = {
   commissionPaid?: string;
   commissionEmployee?: string;
   commissionStore?: string;
+  /** Rapport : panneau debug (?debug=1) */
+  debug?: string;
   /** Onglet Produits → Prix : filtres & pagination (persistés dans l’URL) */
   priceBrand?: string;
   priceModel?: string;
@@ -888,13 +901,15 @@ async function getCommissionsPaginated(
     for (let p = 0; ; p += 1) {
       const start = p * batchSize;
       const end = start + batchSize - 1;
-      const { data, error } = await supabase
+      let gyQuery = supabase
         .from("submissions")
         .select("price, quantity, commission_employee, commission_manager, commission_owner")
         .gte("created_at", fromYear)
         .lt("created_at", toYear)
         .order("id", { ascending: true })
         .range(start, end);
+      gyQuery = excludeCancelledSubmissions(gyQuery);
+      const { data, error } = await gyQuery;
       if (error) throw error;
       const batch = (data || []) as SubmissionRow[];
       if (batch.length === 0) break;
@@ -1057,6 +1072,7 @@ export default async function AdminPage({
       : "all";
   const commissionEmployee = sp.commissionEmployee ?? "";
   const commissionStore = sp.commissionStore ?? "";
+  const showCommissionDebug = sp.debug === "1";
 
   const [submissions, adminUsers, brands, models, prices, employees, stores, commissionsPayload] =
     await Promise.all([
@@ -1085,18 +1101,33 @@ export default async function AdminPage({
               employeeFullName: commissionEmployee,
               storeName: commissionStore,
             }),
-          ]).then(([commissionsData, commissionReportAggregates]) => ({
+            showCommissionDebug
+              ? (async () => {
+                  const { createAdminClient } = await import("@/lib/supabase-server");
+                  return fetchCommissionFilterDebug(createAdminClient(), {
+                    fromDate: commissionFrom,
+                    toDate: commissionTo,
+                    commissionPaid,
+                    employeeFullName: commissionEmployee,
+                    storeName: commissionStore,
+                  });
+                })()
+              : Promise.resolve(null as CommissionFilterDebugSnapshot | null),
+          ]).then(([commissionsData, commissionReportAggregates, commissionFilterDebug]) => ({
             commissionsData,
             commissionReportAggregates,
+            commissionFilterDebug,
           }))
         : Promise.resolve({
             commissionsData: null as CommissionsResult | null,
             commissionReportAggregates: null as CommissionReportAggregates | null,
+            commissionFilterDebug: null as CommissionFilterDebugSnapshot | null,
           }),
     ]);
 
   const commissionsData = commissionsPayload.commissionsData;
   const commissionReportAggregates = commissionsPayload.commissionReportAggregates;
+  const commissionFilterDebug = commissionsPayload.commissionFilterDebug;
 
   const ordersById = new Map<
     string,
@@ -1114,6 +1145,7 @@ export default async function AdminPage({
       store_name: string;
       client_account_number: string;
       statuses: Set<SubmissionStatus>;
+      payment_lines: Array<{ status: SubmissionStatus; commission_paid: boolean }>;
       commission_employee_total: number;
       commission_manager_total: number;
       commission_owner_total: number;
@@ -1138,6 +1170,7 @@ export default async function AdminPage({
         store_name: s.store_name,
         client_account_number: s.client_account_number,
         statuses: new Set([s.status]),
+        payment_lines: [{ status: s.status, commission_paid: s.commission_paid }],
         commission_employee_total: Number(s.commission_employee ?? 0),
         commission_manager_total: Number(s.commission_manager ?? 0),
         commission_owner_total: Number(s.commission_owner ?? 0),
@@ -1170,20 +1203,26 @@ export default async function AdminPage({
     }
 
     existing.statuses.add(s.status);
+    existing.payment_lines.push({
+      status: s.status,
+      commission_paid: s.commission_paid,
+    });
     existing.commission_employee_total += Number(s.commission_employee ?? 0);
     existing.commission_manager_total += Number(s.commission_manager ?? 0);
     existing.commission_owner_total += Number(s.commission_owner ?? 0);
   }
 
   const allOrders = Array.from(ordersById.values())
-    .map(({ statuses, model_names, ...order }) => {
+    .map(({ statuses, payment_lines, model_names, ...order }) => {
       const models = Array.from(model_names).filter(Boolean);
       const model_summary =
         models.length <= 1 ? (models[0] ?? "—") : `${models[0]} +${models.length - 1}`;
+      const paymentStatus = normalizeOverallOrderPaymentStatus(payment_lines);
       return {
         ...order,
         model_summary,
-        status: normalizeOverallOrderStatus(statuses),
+        paymentStatus,
+        status: orderStatusUiToDb(paymentStatus),
         grand_total: orderGrandTotal(order),
       };
     })
@@ -1204,7 +1243,7 @@ export default async function AdminPage({
   }
   if (ordersStatusFilter) {
     filteredOrders = filteredOrders.filter((o) =>
-      orderMatchesStatusFilter(o.status, ordersStatusFilter),
+      orderMatchesStatusFilter(o.paymentStatus, ordersStatusFilter),
     );
   }
 
@@ -1263,6 +1302,8 @@ export default async function AdminPage({
       initialProductsPricesFilters={initialProductsPricesFilters}
       commissionsData={commissionsData}
       commissionReportAggregates={commissionReportAggregates}
+      commissionFilterDebug={commissionFilterDebug}
+      showCommissionDebug={showCommissionDebug}
       employees={employees}
       stores={stores}
       cashflowSnapshot={cashflowSnapshot}

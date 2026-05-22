@@ -2,30 +2,23 @@
 
 import { createAdminClient } from "@/lib/supabase-server";
 import { revalidatePath } from "next/cache";
-import type { SubmissionStatus } from "@/lib/submissions";
+import {
+  buildPaymentUpdateFromOrderUi,
+  type OrderStatusUi,
+} from "@/lib/order-status";
 import { requireAdmin } from "@/lib/admin-auth";
-import { commissionPaidForOrderStatus } from "@/lib/order-status";
 
 type UpdateOrderStatusParams = {
   orderId: string;
-  status: SubmissionStatus;
+  paymentStatus: OrderStatusUi;
 };
 
-function buildStatusUpdatePayload(status: SubmissionStatus) {
-  const payload: { status: SubmissionStatus; commission_paid?: boolean } = { status };
-  const commissionPaid = commissionPaidForOrderStatus(status);
-  if (commissionPaid !== undefined) {
-    payload.commission_paid = commissionPaid;
-  }
-  return payload;
-}
-
-async function updateSubmissionsByOrderId(
+async function updateSubmissionsPaymentByOrderId(
   supabase: ReturnType<typeof createAdminClient>,
   orderId: string,
-  status: SubmissionStatus,
+  paymentStatus: OrderStatusUi,
 ) {
-  const payload = buildStatusUpdatePayload(status);
+  const payload = buildPaymentUpdateFromOrderUi(paymentStatus);
 
   const byGroup = await supabase
     .from("submissions")
@@ -52,18 +45,25 @@ async function updateSubmissionsByOrderId(
   return { success: true as const };
 }
 
-export async function updateOrderStatus({ orderId, status }: UpdateOrderStatusParams) {
+export async function updateOrderStatus({
+  orderId,
+  paymentStatus,
+}: UpdateOrderStatusParams) {
   const admin = await requireAdmin();
   if (!admin) {
     return { success: false, error: "Unauthorized" };
   }
 
-  if (admin.role !== "super_admin" && status !== "cancelled") {
+  if (admin.role !== "super_admin" && paymentStatus !== "cancelled") {
     return { success: false, error: "Forbidden" };
   }
 
   const supabase = createAdminClient();
-  const result = await updateSubmissionsByOrderId(supabase, orderId, status);
+  const result = await updateSubmissionsPaymentByOrderId(
+    supabase,
+    orderId,
+    paymentStatus,
+  );
   if (!result.success) {
     return result;
   }

@@ -12,10 +12,8 @@ import { updateOrderStore } from "../../actions/update-order-store";
 import { uploadShippingLabel } from "../actions/upload-shipping-label";
 import type { SubmissionStatus } from "@/lib/submissions";
 import {
-  normalizeOverallOrderStatus,
+  normalizeOverallOrderPaymentStatus,
   ORDER_STATUS_BADGE_CLASS,
-  orderStatusUiToDb,
-  toOrderStatusUi,
   type OrderStatusUi,
 } from "@/lib/order-status";
 import { submissionLineTotal } from "@/lib/submissions";
@@ -127,10 +125,12 @@ export function OrderDetail({
       a.created_at < b.created_at ? -1 : 1,
     );
     const first = sortedByDate[0];
-    const overallStatus = normalizeOverallOrderStatus(
-      new Set(submissions.map((s) => s.status)),
+    const overallStatusUi = normalizeOverallOrderPaymentStatus(
+      submissions.map((s) => ({
+        status: s.status,
+        commission_paid: s.commission_paid,
+      })),
     );
-    const overallStatusUi = toOrderStatusUi(overallStatus);
     const devicesTotal = submissions.reduce(
       (sum, s) => sum + submissionLineTotal(s.price, s.quantity),
       0,
@@ -158,7 +158,6 @@ export function OrderDetail({
 
     return {
       first,
-      overallStatus,
       overallStatusUi,
       devicesTotal,
       orderUnitsTotal,
@@ -268,7 +267,7 @@ export function OrderDetail({
     setIsUpdatingOrderStatus(true);
     const result = await updateOrderStatus({
       orderId,
-      status: orderStatusUiToDb(newStatus),
+      paymentStatus: newStatus,
     });
     setIsUpdatingOrderStatus(false);
     if (!result.success) {

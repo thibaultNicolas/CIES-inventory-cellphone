@@ -9,43 +9,76 @@ export const ORDER_STATUS_UI_VALUES: readonly OrderStatusUi[] = [
   "cancelled",
 ] as const;
 
+export type OrderPaymentLine = {
+  status: SubmissionStatus;
+  commission_paid: boolean;
+};
+
 export function isOrderStatusUi(value: string): value is OrderStatusUi {
   return ORDER_STATUS_UI_VALUES.includes(value as OrderStatusUi);
 }
 
-/** Regroupe `unprocessed` et `label_sent` (legacy) sous « en attente ». */
-export function toOrderStatusUi(status: SubmissionStatus): OrderStatusUi {
-  if (status === "paid") return "paid";
-  if (status === "cancelled") return "cancelled";
+/**
+ * Statut de paiement affiché : une seule source — `commission_paid` (hors annulé).
+ */
+export function toOrderStatusUi(line: OrderPaymentLine): OrderStatusUi {
+  if (line.status === "cancelled") return "cancelled";
+  if (line.commission_paid) return "paid";
   return "pending";
 }
 
+/** @deprecated Préférer `toOrderStatusUi` avec `commission_paid`. */
+export function toOrderStatusUiFromDbStatus(status: SubmissionStatus): OrderStatusUi {
+  return toOrderStatusUi({
+    status,
+    commission_paid: status === "paid",
+  });
+}
+
 export function orderStatusUiToDb(ui: OrderStatusUi): SubmissionStatus {
+  return buildPaymentUpdateFromOrderUi(ui).status;
+}
+
+/** Payload DB aligné sur « commission payée » = demande soldée. */
+export function buildPaymentUpdateFromOrderUi(ui: OrderStatusUi): {
+  status: SubmissionStatus;
+  commission_paid: boolean;
+} {
   switch (ui) {
     case "paid":
-      return "paid";
+      return { status: "paid", commission_paid: true };
     case "cancelled":
-      return "cancelled";
+      return { status: "cancelled", commission_paid: false };
     default:
-      return "unprocessed";
+      return { status: "unprocessed", commission_paid: false };
   }
 }
 
-/** Aligne `commission_paid` avec le statut rachat (Payé / en attente / annulé). */
-export function commissionPaidForOrderStatus(
-  status: SubmissionStatus,
-): boolean | undefined {
-  if (status === "paid") return true;
-  if (status === "unprocessed" || status === "cancelled") return false;
-  return undefined;
+export function buildPaymentUpdateFromCommissionPaid(commissionPaid: boolean): {
+  status: SubmissionStatus;
+  commission_paid: boolean;
+} {
+  return commissionPaid
+    ? { status: "paid", commission_paid: true }
+    : { status: "unprocessed", commission_paid: false };
+}
+
+/** Statut agrégé d’une commande (plusieurs lignes). */
+export function normalizeOverallOrderPaymentStatus(
+  lines: ReadonlyArray<OrderPaymentLine>,
+): OrderStatusUi {
+  if (lines.length === 0) return "pending";
+  if (lines.some((l) => l.status === "cancelled")) return "cancelled";
+  if (lines.every((l) => l.commission_paid && l.status !== "cancelled")) return "paid";
+  return "pending";
 }
 
 export function orderMatchesStatusFilter(
-  status: SubmissionStatus,
+  paymentStatus: OrderStatusUi,
   filter: OrderStatusUi | null,
 ): boolean {
   if (!filter) return true;
-  return toOrderStatusUi(status) === filter;
+  return paymentStatus === filter;
 }
 
 export const ORDER_STATUS_BADGE_CLASS: Record<OrderStatusUi, string> = {
@@ -68,12 +101,16 @@ export function serializeOrdersStoresParam(storeNames: string[]): string {
   return storeNames.map((name) => encodeURIComponent(name)).join(ORDERS_STORES_SEP);
 }
 
+/** @deprecated Utiliser `normalizeOverallOrderPaymentStatus`. */
 export function normalizeOverallOrderStatus(
   statuses: ReadonlySet<SubmissionStatus>,
 ): SubmissionStatus {
-  if (statuses.size === 0) return "unprocessed";
-  if (statuses.has("cancelled")) return "cancelled";
-  if (statuses.has("unprocessed") || statuses.has("label_sent")) return "unprocessed";
-  if (statuses.has("paid")) return "paid";
+  const lines = Array.from(statuses).map((status) => ({
+    status,
+    commission_paid: status === "paid",
+  }));
+  const ui = normalizeOverallOrderPaymentStatus(lines);
+  if (ui === "cancelled") return "cancelled";
+  if (ui === "paid") return "paid";
   return "unprocessed";
 }

@@ -16,6 +16,7 @@ import { StaffReferenceManager } from "./StaffReferenceManager";
 import { StoreCashflowPanel } from "./StoreCashflowPanel";
 import { ReportStatsPanel } from "./ReportStatsPanel";
 import type { CashflowOrphanRow, StoreCashflowRow } from "@/lib/petty-cash";
+import type { CommissionFilterDebugSnapshot } from "@/lib/commission-filter-debug";
 import {
   ArrowLeft,
   Menu,
@@ -176,6 +177,8 @@ type AdminLayoutProps = {
   initialProductsPricesFilters?: ProductsPricesFiltersInit;
   commissionsData?: CommissionsData | null;
   commissionReportAggregates?: CommissionReportAggregates | null;
+  commissionFilterDebug?: CommissionFilterDebugSnapshot | null;
+  showCommissionDebug?: boolean;
   employees: { id: string; full_name: string }[];
   stores: { id: string; name: string }[];
   cashflowSnapshot: { rows: StoreCashflowRow[]; orphans: CashflowOrphanRow[] };
@@ -206,6 +209,8 @@ export function AdminLayout({
   initialProductsPricesFilters,
   commissionsData = null,
   commissionReportAggregates = null,
+  commissionFilterDebug = null,
+  showCommissionDebug = false,
   employees,
   stores,
   cashflowSnapshot,
@@ -543,8 +548,18 @@ export function AdminLayout({
                 ) : null}
               </div>
               <CommissionsDashboard
+                key={[
+                  commissionsData?.page ?? 0,
+                  commissionsData?.fromDate ?? "",
+                  commissionsData?.toDate ?? "",
+                  commissionsData?.commissionPaid ?? "all",
+                  commissionsData?.employeeFullName ?? "",
+                  commissionsData?.storeName ?? "",
+                ].join("|")}
                 commissionsData={commissionsData}
                 commissionReportAggregates={commissionReportAggregates}
+                commissionFilterDebug={commissionFilterDebug}
+                showCommissionDebug={showCommissionDebug}
                 employees={employees}
                 stores={stores}
                 canExportPdf={canManageFinancials}

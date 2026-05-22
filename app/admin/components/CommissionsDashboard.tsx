@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/table";
 import { useI18n } from "@/contexts/I18nContext";
 import type { CommissionsData, CommissionReportAggregates } from "./AdminLayout";
+import type { CommissionFilterDebugSnapshot } from "@/lib/commission-filter-debug";
 import { submissionLineTotal } from "@/lib/submissions";
 import { formatReportMonthLabel } from "@/lib/report-dates";
 import {
@@ -183,6 +184,8 @@ function buildCommissionsExportUrl(params: {
 type CommissionsDashboardProps = {
   commissionsData: CommissionsData | null;
   commissionReportAggregates: CommissionReportAggregates | null;
+  commissionFilterDebug?: CommissionFilterDebugSnapshot | null;
+  showCommissionDebug?: boolean;
   employees: { id: string; full_name: string }[];
   stores: { id: string; name: string }[];
   /** PDF réservé au super administrateur ; CSV reste disponible pour les admins. */
@@ -194,6 +197,8 @@ type CommissionsDashboardProps = {
 export function CommissionsDashboard({
   commissionsData,
   commissionReportAggregates,
+  commissionFilterDebug = null,
+  showCommissionDebug = false,
   employees,
   stores,
   canExportPdf = false,
@@ -335,18 +340,28 @@ export function CommissionsDashboard({
     doc.save(`rapport-rachats-${new Date().toISOString().slice(0, 10)}.pdf`);
   };
 
+  const pushCommissionsFilters = (
+    overrides: Parameters<typeof buildCommissionsQuery>[0],
+  ) => {
+    const q = buildCommissionsQuery({
+      pageSize,
+      from: fromDate || undefined,
+      to: toDate || undefined,
+      commissionPaid,
+      employeeFullName: employeeFilter === "all" ? undefined : employeeFilter,
+      storeName: storeFilter === "all" ? undefined : storeFilter,
+      ...overrides,
+    });
+    const next = `/admin?${q}`;
+    startTransition(() => {
+      router.replace(next, { scroll: false });
+      router.refresh();
+    });
+  };
+
   const handlePeriodPreset = (preset: PeriodPreset) => {
     if (preset === "all") {
-      const q = buildCommissionsQuery({
-        page: 1,
-        pageSize,
-        commissionPaid,
-        employeeFullName: employeeFilter === "all" ? undefined : employeeFilter,
-        storeName: storeFilter === "all" ? undefined : storeFilter,
-      });
-      startTransition(() => {
-        router.push(`/admin?${q}`);
-      });
+      pushCommissionsFilters({ page: 1, from: undefined, to: undefined });
       return;
     }
     if (preset === "custom") return;
@@ -392,17 +407,10 @@ export function CommissionsDashboard({
         return;
     }
 
-    const q = buildCommissionsQuery({
+    pushCommissionsFilters({
       page: 1,
-      pageSize,
       from: toDateInputValue(from),
       to: toDateInputValue(to),
-      commissionPaid,
-      employeeFullName: employeeFilter === "all" ? undefined : employeeFilter,
-      storeName: storeFilter === "all" ? undefined : storeFilter,
-    });
-    startTransition(() => {
-      router.push(`/admin?${q}`);
     });
   };
 
@@ -412,77 +420,28 @@ export function CommissionsDashboard({
   };
 
   const handleCommissionPaidChange = (value: CommissionPaidFilter) => {
-    const q = buildCommissionsQuery({
-      page: 1,
-      pageSize,
-      from: fromDate || undefined,
-      to: toDate || undefined,
-      commissionPaid: value,
-      employeeFullName: employeeFilter === "all" ? undefined : employeeFilter,
-      storeName: storeFilter === "all" ? undefined : storeFilter,
-    });
-    startTransition(() => {
-      router.push(`/admin?${q}`);
-    });
+    pushCommissionsFilters({ page: 1, commissionPaid: value });
   };
 
   const handleFromDateChange = (value: string) => {
-    const q = buildCommissionsQuery({
-      page: 1,
-      pageSize,
-      from: value || undefined,
-      to: toDate || undefined,
-      commissionPaid,
-      employeeFullName: employeeFilter === "all" ? undefined : employeeFilter,
-      storeName: storeFilter === "all" ? undefined : storeFilter,
-    });
-    startTransition(() => {
-      router.push(`/admin?${q}`);
-    });
+    pushCommissionsFilters({ page: 1, from: value || undefined });
   };
 
   const handleToDateChange = (value: string) => {
-    const q = buildCommissionsQuery({
-      page: 1,
-      pageSize,
-      from: fromDate || undefined,
-      to: value || undefined,
-      commissionPaid,
-      employeeFullName: employeeFilter === "all" ? undefined : employeeFilter,
-      storeName: storeFilter === "all" ? undefined : storeFilter,
-    });
-    startTransition(() => {
-      router.push(`/admin?${q}`);
-    });
+    pushCommissionsFilters({ page: 1, to: value || undefined });
   };
 
   const handleEmployeeFilterChange = (value: string) => {
-    const q = buildCommissionsQuery({
+    pushCommissionsFilters({
       page: 1,
-      pageSize,
-      from: fromDate || undefined,
-      to: toDate || undefined,
-      commissionPaid,
       employeeFullName: value === "all" ? undefined : value,
-      storeName: storeFilter === "all" ? undefined : storeFilter,
-    });
-    startTransition(() => {
-      router.push(`/admin?${q}`);
     });
   };
 
   const handleStoreFilterChange = (value: string) => {
-    const q = buildCommissionsQuery({
+    pushCommissionsFilters({
       page: 1,
-      pageSize,
-      from: fromDate || undefined,
-      to: toDate || undefined,
-      commissionPaid,
-      employeeFullName: employeeFilter === "all" ? undefined : employeeFilter,
       storeName: value === "all" ? undefined : value,
-    });
-    startTransition(() => {
-      router.push(`/admin?${q}`);
     });
   };
 
@@ -495,6 +454,64 @@ export function CommissionsDashboard({
         <div className="rounded-card border border-brand-primary/25 bg-brand-primary/8 px-4 py-2 text-xs font-medium text-brand-primary">
           {t.admin.reportLoading}
         </div>
+      ) : null}
+      {showCommissionDebug && commissionFilterDebug ? (
+        <section
+          className="space-y-2 rounded-card border border-amber-400/40 bg-amber-50/80 p-4 font-mono text-xs text-amber-950"
+          aria-label="Debug filtres rapport"
+        >
+          <p className="font-semibold uppercase tracking-wide">Debug rapport (?debug=1)</p>
+          <dl className="grid gap-1 sm:grid-cols-2">
+            <div>
+              <dt className="text-amber-900/70">Total lignes</dt>
+              <dd>{commissionFilterDebug.totals.all}</dd>
+            </div>
+            <div>
+              <dt className="text-amber-900/70">commission_paid = true</dt>
+              <dd>{commissionFilterDebug.totals.commissionPaidTrue}</dd>
+            </div>
+            <div>
+              <dt className="text-amber-900/70">commission_paid = false</dt>
+              <dd>{commissionFilterDebug.totals.commissionPaidFalse}</dd>
+            </div>
+            <div>
+              <dt className="text-amber-900/70">Annulées</dt>
+              <dd>{commissionFilterDebug.totals.cancelled}</dd>
+            </div>
+            <div>
+              <dt className="text-amber-900/70">À recevoir (filtre impayé)</dt>
+              <dd>{commissionFilterDebug.totals.receivableUnpaid}</dd>
+            </div>
+            <div>
+              <dt className="text-amber-900/70">Correspond au filtre actif</dt>
+              <dd className="font-bold">{commissionFilterDebug.matchedWithActiveFilter}</dd>
+            </div>
+          </dl>
+          <p className="text-amber-900/80">
+            Filtre actif : paiement={commissionFilterDebug.activeFilter.commissionPaid}
+            {commissionFilterDebug.activeFilter.fromDate
+              ? ` · du ${commissionFilterDebug.activeFilter.fromDate}`
+              : ""}
+            {commissionFilterDebug.activeFilter.toDate
+              ? ` au ${commissionFilterDebug.activeFilter.toDate}`
+              : ""}
+            {commissionFilterDebug.activeFilter.employeeFullName
+              ? ` · employé=${commissionFilterDebug.activeFilter.employeeFullName}`
+              : ""}
+            {commissionFilterDebug.activeFilter.storeName
+              ? ` · magasin=${commissionFilterDebug.activeFilter.storeName}`
+              : ""}
+          </p>
+          <p className="text-amber-900/80">
+            UI total={total} · agrégats unités={agg.totalUnits} · rachat=
+            {agg.totalBuyback.toFixed(2)} $
+          </p>
+          {commissionFilterDebug.note ? (
+            <p className="rounded border border-amber-500/30 bg-white/60 p-2 text-amber-950">
+              {commissionFilterDebug.note}
+            </p>
+          ) : null}
+        </section>
       ) : null}
       <section className="space-y-3 rounded-card border border-foreground/10 bg-background p-4 shadow-soft">
         <div className="flex flex-wrap items-center justify-between gap-2">

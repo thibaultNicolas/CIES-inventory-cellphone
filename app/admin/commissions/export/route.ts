@@ -2,7 +2,11 @@ import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/admin-auth";
 import { createAdminClient } from "@/lib/supabase-server";
 import type { SubmissionRow } from "@/lib/submissions";
-import { normalizeSubmissionRow, submissionLineTotal } from "@/lib/submissions";
+import {
+  normalizeSubmissionRow,
+  submissionLineGrandTotal,
+  submissionLineTotal,
+} from "@/lib/submissions";
 import { applyCommissionFilters } from "@/lib/commission-filters";
 
 function esc(value: unknown): string {
@@ -74,6 +78,7 @@ export async function GET(request: Request) {
       "Commission gerant",
       "Commission proprio",
       "Commission totale",
+      "Total (rachat + commissions)",
       "Statut",
       "Commission payee",
     ].join(",") + "\n";
@@ -123,6 +128,13 @@ export async function GET(request: Request) {
             const cManager = Number(s.commission_manager ?? 0);
             const cOwner = Number(s.commission_owner ?? 0);
             const cTotal = cEmployee + cManager + cOwner;
+            const lineGrandTotal = submissionLineGrandTotal(
+              s.price,
+              s.quantity,
+              cEmployee,
+              cManager,
+              cOwner,
+            );
 
             chunk +=
               [
@@ -143,6 +155,7 @@ export async function GET(request: Request) {
                 esc(cManager.toFixed(2)),
                 esc(cOwner.toFixed(2)),
                 esc(cTotal.toFixed(2)),
+                esc(lineGrandTotal.toFixed(2)),
                 esc(sanitizeSpreadsheetCell(s.status)),
                 esc(s.commission_paid ? "Oui" : "Non"),
               ].join(",") + "\n";

@@ -150,6 +150,26 @@ export function submissionLineTotal(unitPrice: number, quantity: unknown): numbe
   return unitPrice * q;
 }
 
+/** Rachat (prix × qté) + commissions employé, gérant et proprio pour une ligne. */
+export function submissionLineGrandTotal(
+  unitPrice: number,
+  quantity: unknown,
+  commissionEmployee?: number | null,
+  commissionManager?: number | null,
+  commissionOwner?: number | null,
+): number {
+  const buyback = submissionLineTotal(unitPrice, quantity);
+  const employee = Number(commissionEmployee ?? 0);
+  const manager = Number(commissionManager ?? 0);
+  const owner = Number(commissionOwner ?? 0);
+  return (
+    buyback +
+    (Number.isFinite(employee) ? employee : 0) +
+    (Number.isFinite(manager) ? manager : 0) +
+    (Number.isFinite(owner) ? owner : 0)
+  );
+}
+
 /** Prix de rachat + commissions employé, gérant et proprio (total commande). */
 export function orderGrandTotal(order: {
   gross_total: number;

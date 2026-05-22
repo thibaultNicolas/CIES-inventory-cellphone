@@ -19,10 +19,9 @@ import { updateOrderStatus } from "../../actions/update-order-status";
 import { updateOrderStore } from "../../actions/update-order-store";
 import { orderGrandTotal, type SubmissionStatus } from "@/lib/submissions";
 import {
+  buildPaymentUpdateFromOrderUi,
   ORDER_STATUS_BADGE_CLASS,
-  orderStatusUiToDb,
   serializeOrdersStoresParam,
-  toOrderStatusUi,
   type OrderStatusUi,
 } from "@/lib/order-status";
 import { cn } from "@/lib/utils";
@@ -44,6 +43,7 @@ export type OrderSummary = {
   store_name: string;
   client_account_number: string;
   status: SubmissionStatus;
+  paymentStatus: OrderStatusUi;
   commission_employee_total?: number | null;
   commission_manager_total?: number | null;
   commission_owner_total?: number | null;
@@ -184,7 +184,7 @@ export function OrdersTable({
   const handleStatusChange = async (orderId: string, newStatus: OrderStatusUi) => {
     const result = await updateOrderStatus({
       orderId,
-      status: orderStatusUiToDb(newStatus),
+      paymentStatus: newStatus,
     });
     if (!result.success) {
       alert(
@@ -194,9 +194,13 @@ export function OrdersTable({
       );
       return;
     }
-    const dbStatus = orderStatusUiToDb(newStatus);
+    const payload = buildPaymentUpdateFromOrderUi(newStatus);
     setOrdersState((prev) =>
-      prev.map((o) => (o.orderId === orderId ? { ...o, status: dbStatus } : o)),
+      prev.map((o) =>
+        o.orderId === orderId
+          ? { ...o, paymentStatus: newStatus, status: payload.status }
+          : o,
+      ),
     );
     router.refresh();
   };
@@ -242,11 +246,14 @@ export function OrdersTable({
     setIsBulkUpdating(true);
     const failures: string[] = [];
 
-    const bulkDbStatus = orderStatusUiToDb(bulkStatus);
+    const bulkPayload = buildPaymentUpdateFromOrderUi(bulkStatus);
+    const succeeded = new Set<string>();
     for (const orderId of selectedOrderIds) {
-      const result = await updateOrderStatus({ orderId, status: bulkDbStatus });
+      const result = await updateOrderStatus({ orderId, paymentStatus: bulkStatus });
       if (!result.success) {
         failures.push(orderId);
+      } else {
+        succeeded.add(orderId);
       }
     }
 
@@ -258,7 +265,9 @@ export function OrdersTable({
 
     setOrdersState((prev) =>
       prev.map((o) =>
-        selectedOrderIds.includes(o.orderId) ? { ...o, status: bulkDbStatus } : o,
+        succeeded.has(o.orderId)
+          ? { ...o, paymentStatus: bulkStatus, status: bulkPayload.status }
+          : o,
       ),
     );
     setSelectedOrderIds([]);
@@ -550,8 +559,8 @@ export function OrdersTable({
                   onClick={(e) => e.stopPropagation()}
                 >
                   <OrderStatusBadge
-                    ui={toOrderStatusUi(order.status)}
-                    label={t.admin[ORDER_STATUS_LABEL_KEY[toOrderStatusUi(order.status)]]}
+                    ui={order.paymentStatus}
+                    label={t.admin[ORDER_STATUS_LABEL_KEY[order.paymentStatus]]}
                   />
                 </TableCell>
                 <TableCell className={cn(tdCompact, stickyActionsCol, "text-right")}>
