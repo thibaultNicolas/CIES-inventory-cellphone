@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requireSuperAdmin } from "@/lib/admin-auth";
+import { requireAdmin } from "@/lib/admin-auth";
 import { createAdminClient } from "@/lib/supabase-server";
 import { DEFAULT_COMMISSION_RULES, type CommissionRule } from "@/lib/commission-policy";
 
@@ -52,7 +52,7 @@ function validateRules(input: CommissionRule[]): string | null {
 }
 
 export async function getCommissionRules() {
-  const admin = await requireSuperAdmin();
+  const admin = await requireAdmin();
   if (!admin) return { success: false, error: "Forbidden", rules: [] as CommissionRule[] };
 
   const supabase = createAdminClient();
@@ -82,7 +82,7 @@ export async function getCommissionRules() {
 }
 
 export async function saveCommissionRules({ rules }: SaveCommissionRulesInput) {
-  const admin = await requireSuperAdmin();
+  const admin = await requireAdmin();
   if (!admin) return { success: false, error: "Forbidden" };
 
   const normalized = [...rules].map(normalizeRule).sort((a, b) => a.minGross - b.minGross);

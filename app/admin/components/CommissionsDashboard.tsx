@@ -188,7 +188,7 @@ type CommissionsDashboardProps = {
   showCommissionDebug?: boolean;
   employees: { id: string; full_name: string }[];
   stores: { id: string; name: string }[];
-  /** PDF réservé au super administrateur ; CSV reste disponible pour les admins. */
+  /** Export PDF (admin et super_admin) ; CSV disponible pour tous les admins. */
   canExportPdf?: boolean;
   cashflowSnapshot: { rows: StoreCashflowRow[]; orphans: CashflowOrphanRow[] };
   canEditPettyCash?: boolean;

@@ -623,9 +623,9 @@ export const translations = {
       reportAxisUnits: "Unités",
       exportPdfLabel: "Exporter PDF",
       forbiddenFinancialAction:
-        "Action réservée au super administrateur (paiement et commissions).",
+        "Action réservée aux administrateurs (paiement et commissions).",
       adminReadOnlyFinancialsHint:
-        "Consultation et export (CSV, PDF) : vous pouvez voir toutes les demandes, annuler une commande et modifier le magasin. Modifier prix, statut de paiement ou commissions payées est réservé au super administrateur.",
+        "Consultation uniquement : la modification des prix, statuts de paiement et commissions payées est réservée aux administrateurs.",
       noDevicesForPeriod: "Aucun appareil pour cette période",
       markAsPaid: "Marquer comme payée",
       markAsUnpaid: "Marquer comme non payée",
@@ -639,10 +639,10 @@ export const translations = {
       tradeInRequestsCountLabel: "demande au total",
       tradeInRequestsCountLabelPlural: "demandes au total",
       tradeInRequestsPaymentsHint:
-        "Super administrateur : gérez ici le statut de paiement rachat de chaque commande, ouvrez une commande pour ajuster les prix et marquer les commissions payées. Les règles de calcul des commissions se modifient en bas de cette page (liste des commandes).",
+        "Gérez ici le statut de paiement rachat de chaque commande, ouvrez une commande pour ajuster les prix et marquer les commissions payées. Les règles de calcul des commissions se modifient en bas de cette page (liste des commandes).",
       commissionsTitle: "Statistiques & rapports",
       commissionsSubtitle:
-        "Tableaux, graphiques et exports (CSV, PDF). Consultation pour les administrateurs ; les actions de paiement et de commission se font dans « Demandes de rachat » (super administrateur).",
+        "Tableaux, graphiques et exports (CSV, PDF). Les actions de paiement et de commission se font dans « Demandes de rachat ».",
       reportStatsOnlyHint:
         "Marquez une commande « Commission payée » dans l’onglet « Demandes de rachat » pour la retirer du bloc « À recevoir » (commissions et total indicatif).",
       reportStatsSectionTitle: "STATS",
@@ -1270,9 +1270,9 @@ export const translations = {
       reportAxisUnits: "Units",
       exportPdfLabel: "Export PDF",
       forbiddenFinancialAction:
-        "This action is limited to super admins (payments and commissions).",
+        "This action is limited to administrators (payments and commissions).",
       adminReadOnlyFinancialsHint:
-        "View and export (CSV, PDF): you can see all requests, cancel an order, and change the store. Editing price, payment status, or commission paid is reserved for super admin.",
+        "View only: editing price, payment status, or commission paid is reserved for administrators.",
       noDevicesForPeriod: "No devices for this period",
       markAsPaid: "Mark as paid",
       markAsUnpaid: "Mark as unpaid",
@@ -1286,10 +1286,10 @@ export const translations = {
       tradeInRequestsCountLabel: "request total",
       tradeInRequestsCountLabelPlural: "requests total",
       tradeInRequestsPaymentsHint:
-        "Super admin: set each order’s trade-in payment status here; open an order to adjust prices and mark commissions paid. Commission calculation rules are edited at the bottom of this page (order list).",
+        "Set each order’s trade-in payment status here; open an order to adjust prices and mark commissions paid. Commission calculation rules are edited at the bottom of this page (order list).",
       commissionsTitle: "Statistics & reports",
       commissionsSubtitle:
-        "Charts, tables, and exports (CSV, PDF). Admins can view and export; payment and commission actions are in Trade-in requests (super admin).",
+        "Charts, tables, and exports (CSV, PDF). Payment and commission actions are in Trade-in requests.",
       reportStatsOnlyHint:
         "Mark an order as “Commission paid” in the “Trade-in requests” tab to remove it from the “Outstanding” summary (commissions and indicative total).",
       reportStatsSectionTitle: "STATS",

@@ -2,7 +2,7 @@
 
 import { createAdminClient } from "@/lib/supabase-server";
 import { revalidatePath } from "next/cache";
-import { requireSuperAdmin } from "@/lib/admin-auth";
+import { requireAdmin } from "@/lib/admin-auth";
 import { computeCommissionForLineUnits } from "@/lib/commission-policy";
 import { getActiveCommissionRules } from "@/lib/commission-rules-server";
 import { parseSubmissionLineQuantity } from "@/lib/submissions";
@@ -18,7 +18,7 @@ export async function updateSubmissionPrice({
   price,
   reason,
 }: UpdateSubmissionPriceParams) {
-  const admin = await requireSuperAdmin();
+  const admin = await requireAdmin();
   if (!admin) {
     return { success: false, error: "Forbidden" };
   }

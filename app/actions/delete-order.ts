@@ -1,10 +1,10 @@
 "use server";
 
 import { createAdminClient } from "@/lib/supabase-server";
-import { requireSuperAdmin } from "@/lib/admin-auth";
+import { requireAdmin } from "@/lib/admin-auth";
 
 export async function deleteOrder(orderId: string) {
-  const admin = await requireSuperAdmin();
+  const admin = await requireAdmin();
   if (!admin) {
     return { success: false, error: "Forbidden" };
   }

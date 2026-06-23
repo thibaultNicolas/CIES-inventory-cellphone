@@ -30,8 +30,13 @@ export function hasMinRole(userRole: AppRole, minimum: AppRole): boolean {
   return ROLE_RANK[userRole] >= ROLE_RANK[minimum];
 }
 
-/** Prix, statuts de rachat (sauf annulation), commission payée, règles — réservé au super_admin. */
+/** Prix, statuts de rachat, commission payée, règles — admin et super_admin. */
 export function canManagePaymentsAndCommissions(role: AppRole): boolean {
+  return hasMinRole(role, "admin");
+}
+
+/** Création / modification / suppression du catalogue — super_admin uniquement. */
+export function canManageProducts(role: AppRole): boolean {
   return role === "super_admin";
 }
 

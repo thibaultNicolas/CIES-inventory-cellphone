@@ -145,7 +145,7 @@ export function OrdersTable({
   const [isPending, startTransition] = useTransition();
   const canCancelOrder = hasMinRole(viewerRole, "admin");
   const canEditStore = hasMinRole(viewerRole, "admin");
-  const canDeleteOrder = viewerRole === "super_admin";
+  const canDeleteOrder = hasMinRole(viewerRole, "admin");
   const [deletingOrderId, setDeletingOrderId] = useState<string | null>(null);
   const [updatingStoreOrderId, setUpdatingStoreOrderId] = useState<string | null>(null);
   const [ordersState, setOrdersState] = useState<EditableOrderRow[]>(() =>

@@ -31,7 +31,12 @@ import {
 import type { OrderStatusUi } from "@/lib/order-status";
 import type { SubmissionStatus } from "@/lib/submissions";
 import type { AppRole } from "@/lib/app-role";
-import { canManagePaymentsAndCommissions, canExportCommissionReportPdf, hasMinRole } from "@/lib/app-role";
+import {
+  canManagePaymentsAndCommissions,
+  canManageProducts as userCanManageProducts,
+  canExportCommissionReportPdf,
+  hasMinRole,
+} from "@/lib/app-role";
 
 type AdminSection =
   | "comptes"
@@ -182,7 +187,7 @@ type AdminLayoutProps = {
   employees: { id: string; full_name: string }[];
   stores: { id: string; name: string }[];
   cashflowSnapshot: { rows: StoreCashflowRow[]; orphans: CashflowOrphanRow[] };
-  /** Section Comptes (création d’utilisateurs) : super_admin uniquement. */
+  /** Section Comptes (création d’utilisateurs) : admin et super_admin. */
   canManageStaffAccounts?: boolean;
   viewerRole?: AppRole;
 };
@@ -232,7 +237,7 @@ export function AdminLayout({
 
   const compactLogout =
     "h-9 border-brand-dark/35 px-4 py-0 text-[11px] tracking-[0.12em] sm:h-10 sm:px-5 sm:text-xs";
-  const canManageProducts = viewerRole === "super_admin";
+  const canManageProducts = userCanManageProducts(viewerRole);
   const canManageFinancials = canManagePaymentsAndCommissions(viewerRole);
   const sectionFromServer = useMemo<AdminSection>(
     () =>
@@ -471,7 +476,7 @@ export function AdminLayout({
                     viewerRole={viewerRole}
                     canManagePaymentsAndCommissions={canManageFinancials}
                   />
-                  {viewerRole === "super_admin" ? (
+                  {canManageFinancials ? (
                     <div className="mt-10">
                       <CommissionRulesManager />
                     </div>

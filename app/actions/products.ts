@@ -2,7 +2,7 @@
 
 import { createAdminClient, createCachedClient } from "@/lib/supabase-server";
 import { revalidatePath } from "next/cache";
-import { requireAdmin } from "@/lib/admin-auth";
+import { requireSuperAdmin } from "@/lib/admin-auth";
 
 export async function getBrands() {
   const supabase = createCachedClient();
@@ -74,7 +74,7 @@ export async function getPrices(modelId?: string) {
 }
 
 export async function createBrand(name: string, logoUrl?: string) {
-  const admin = await requireAdmin();
+  const admin = await requireSuperAdmin();
   if (!admin) return { success: false, data: null, error: "Unauthorized" };
 
   // Writes must bypass RLS
@@ -97,7 +97,7 @@ export async function createBrand(name: string, logoUrl?: string) {
 }
 
 export async function updateBrand(id: string, name: string, logoUrl?: string) {
-  const admin = await requireAdmin();
+  const admin = await requireSuperAdmin();
   if (!admin) return { success: false, data: null, error: "Unauthorized" };
 
   // Writes must bypass RLS
@@ -121,7 +121,7 @@ export async function updateBrand(id: string, name: string, logoUrl?: string) {
 }
 
 export async function deleteBrand(id: string) {
-  const admin = await requireAdmin();
+  const admin = await requireSuperAdmin();
   if (!admin) return { success: false, error: "Unauthorized" };
 
   // Writes must bypass RLS
@@ -139,7 +139,7 @@ export async function deleteBrand(id: string) {
 }
 
 export async function createModel(brandId: string, name: string, imageUrl?: string) {
-  const admin = await requireAdmin();
+  const admin = await requireSuperAdmin();
   if (!admin) return { success: false, data: null, error: "Unauthorized" };
 
   // Writes must bypass RLS
@@ -162,7 +162,7 @@ export async function createModel(brandId: string, name: string, imageUrl?: stri
 }
 
 export async function updateModel(id: string, name: string, imageUrl?: string) {
-  const admin = await requireAdmin();
+  const admin = await requireSuperAdmin();
   if (!admin) return { success: false, data: null, error: "Unauthorized" };
 
   // Writes must bypass RLS
@@ -186,7 +186,7 @@ export async function updateModel(id: string, name: string, imageUrl?: string) {
 }
 
 export async function deleteModel(id: string) {
-  const admin = await requireAdmin();
+  const admin = await requireSuperAdmin();
   if (!admin) return { success: false, error: "Unauthorized" };
 
   // Writes must bypass RLS
@@ -209,7 +209,7 @@ export async function createPrice(
   memory: string,
   price: number
 ) {
-  const admin = await requireAdmin();
+  const admin = await requireSuperAdmin();
   if (!admin) return { success: false, data: null, error: "Unauthorized" };
 
   // Writes must bypass RLS
@@ -236,7 +236,7 @@ export async function updatePrice(
   memory: string,
   price: number
 ) {
-  const admin = await requireAdmin();
+  const admin = await requireSuperAdmin();
   if (!admin) return { success: false, data: null, error: "Unauthorized" };
 
   // Writes must bypass RLS
@@ -267,7 +267,7 @@ export async function updatePricesBulk(
     price?: number;
   }>
 ) {
-  const admin = await requireAdmin();
+  const admin = await requireSuperAdmin();
   if (!admin) return { success: false, error: "Unauthorized" };
 
   // Writes must bypass RLS
@@ -363,7 +363,7 @@ export async function updatePricesBulk(
 }
 
 export async function deletePrice(id: string) {
-  const admin = await requireAdmin();
+  const admin = await requireSuperAdmin();
   if (!admin) return { success: false, error: "Unauthorized" };
 
   // Writes must bypass RLS

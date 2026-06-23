@@ -10,7 +10,7 @@ import { AdminLayout, type CommissionReportAggregates } from "./components/Admin
 import type { ProductsPricesFiltersInit } from "./components/ProductsManager";
 import { buildStoreCashflowSnapshot } from "@/lib/petty-cash";
 import { getStaff, requireAdmin } from "@/lib/admin-auth";
-import { parseAppRole, type AppRole } from "@/lib/app-role";
+import { parseAppRole, hasMinRole, type AppRole } from "@/lib/app-role";
 import {
   applyCommissionFilters,
   applyReceivableFilters,
@@ -1046,10 +1046,7 @@ export default async function AdminPage({
       ? sp.section
       : "demandes";
 
-  if (
-    (requestedSection === "comptes" || requestedSection === "produits") &&
-    admin.role !== "super_admin"
-  ) {
+  if (requestedSection === "produits" && admin.role !== "super_admin") {
     redirect("/admin?section=demandes");
   }
 
@@ -1089,7 +1086,7 @@ export default async function AdminPage({
   const [submissions, adminUsers, brands, models, prices, employees, stores, commissionsPayload] =
     await Promise.all([
       getSubmissions(),
-      admin.role === "super_admin" ? getAdminUsers() : Promise.resolve([] as AdminUser[]),
+      getAdminUsers(),
       getBrands(),
       getModels(),
       getPrices(),
@@ -1319,7 +1316,7 @@ export default async function AdminPage({
       employees={employees}
       stores={stores}
       cashflowSnapshot={cashflowSnapshot}
-      canManageStaffAccounts={admin.role === "super_admin"}
+      canManageStaffAccounts={hasMinRole(admin.role, "admin")}
       viewerRole={admin.role}
     />
   );

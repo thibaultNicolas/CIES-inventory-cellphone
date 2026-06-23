@@ -61,7 +61,7 @@ type OrderDetailProps = {
   orderId: string;
   submissions: OrderDetailSubmission[];
   stores: { id: string; name: string }[];
-  /** Prix, statuts de rachat, commission payée : super_admin uniquement. */
+  /** Prix, statuts de rachat, commission payée : admin et super_admin. */
   canManagePaymentsAndCommissions?: boolean;
   viewerRole: AppRole;
 };
@@ -98,7 +98,7 @@ export function OrderDetail({
   const { t, locale } = useI18n();
   const canCancelOrder = hasMinRole(viewerRole, "admin");
   const canEditStore = hasMinRole(viewerRole, "admin");
-  const canDeleteOrder = viewerRole === "super_admin";
+  const canDeleteOrder = hasMinRole(viewerRole, "admin");
   const [isWorking, setIsWorking] = useState<Record<string, boolean>>({});
   const [isUploadingLabel, setIsUploadingLabel] = useState(false);
   const [isLabelDragActive, setIsLabelDragActive] = useState(false);

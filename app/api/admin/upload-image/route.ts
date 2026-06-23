@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase-server";
-import { requireAdmin } from "@/lib/admin-auth";
+import { requireSuperAdmin } from "@/lib/admin-auth";
 
 const ALLOWED_BUCKETS = new Set(["device-images"]);
 
@@ -17,7 +17,7 @@ function sanitizeFolder(input: string): string {
 
 export async function POST(request: Request) {
   try {
-    const admin = await requireAdmin();
+    const admin = await requireSuperAdmin();
     if (!admin) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

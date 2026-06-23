@@ -60,7 +60,7 @@ export async function requireAdmin(): Promise<AuthenticatedStaff | null> {
   return requireMinRole("admin");
 }
 
-/** Gestion des comptes (création / suppression) : super_admin uniquement. */
+/** Catalogue produits (marques, modèles, prix) : super_admin uniquement. */
 export async function requireSuperAdmin(): Promise<AuthenticatedStaff | null> {
   return requireMinRole("super_admin");
 }

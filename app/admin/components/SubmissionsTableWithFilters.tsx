@@ -48,7 +48,7 @@ type Submission = {
 type SubmissionsTableWithFiltersProps = {
   submissions: Submission[];
   hideFilters?: boolean;
-  /** Basculer payé / non payé : super_admin uniquement. */
+  /** Basculer payé / non payé : admin et super_admin. */
   canManageCommissionPaid?: boolean;
 };
 

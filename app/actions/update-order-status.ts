@@ -54,10 +54,6 @@ export async function updateOrderStatus({
     return { success: false, error: "Unauthorized" };
   }
 
-  if (admin.role !== "super_admin" && paymentStatus !== "cancelled") {
-    return { success: false, error: "Forbidden" };
-  }
-
   const supabase = createAdminClient();
   const result = await updateSubmissionsPaymentByOrderId(
     supabase,

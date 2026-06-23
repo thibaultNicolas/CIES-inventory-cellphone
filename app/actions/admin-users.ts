@@ -1,6 +1,6 @@
 "use server";
 
-import { requireSuperAdmin } from "@/lib/admin-auth";
+import { requireAdmin } from "@/lib/admin-auth";
 import { createAdminClient } from "@/lib/supabase-server";
 import { isAppRole } from "@/lib/app-role";
 
@@ -12,9 +12,9 @@ type CreateStaffUserData = {
 };
 
 export async function createAdminUser(data: CreateStaffUserData) {
-  const current = await requireSuperAdmin();
+  const current = await requireAdmin();
   if (!current) {
-    return { success: false, error: "Non autorisé (super admin requis)" };
+    return { success: false, error: "Non autorisé" };
   }
 
   const email = data.email.trim().toLowerCase();
@@ -65,9 +65,9 @@ export async function createAdminUser(data: CreateStaffUserData) {
 }
 
 export async function deleteAdminUser(userId: string) {
-  const current = await requireSuperAdmin();
+  const current = await requireAdmin();
   if (!current) {
-    return { success: false, error: "Non autorisé (super admin requis)" };
+    return { success: false, error: "Non autorisé" };
   }
 
   if (userId === current.adminId || userId === current.authUserId) {
