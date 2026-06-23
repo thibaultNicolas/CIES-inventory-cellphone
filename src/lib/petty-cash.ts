@@ -5,6 +5,8 @@ export type StoreCashflowRow = {
   id: string;
   name: string;
   openingBalance: number;
+  addedTotal: number;
+  totalInflow: number;
   buybackOutflow: number;
   balance: number;
 };
@@ -20,25 +22,29 @@ export function buildStoreCashflowSnapshot(
     price: number;
     quantity: number;
     status: SubmissionStatus;
-    commission_paid: boolean;
   }>,
   stores: ReadonlyArray<{
     id: string;
     name: string;
     petty_cash_opening_balance: number;
+    petty_cash_added_total: number;
   }>,
 ): { rows: StoreCashflowRow[]; orphans: CashflowOrphanRow[] } {
   const outflow = buybackOutflowByStoreName(submissions);
-  const known = new Set(stores.map((s) => s.name));
+  const known = new Set(stores.map((s) => s.name.trim()));
   const rows: StoreCashflowRow[] = stores.map((store) => {
-    const spent = outflow.get(store.name) ?? 0;
+    const spent = outflow.get(store.name.trim()) ?? 0;
     const opening = Number(store.petty_cash_opening_balance ?? 0);
+    const added = Number(store.petty_cash_added_total ?? 0);
+    const totalInflow = opening + added;
     return {
       id: store.id,
       name: store.name,
       openingBalance: opening,
+      addedTotal: added,
+      totalInflow,
       buybackOutflow: spent,
-      balance: opening - spent,
+      balance: totalInflow - spent,
     };
   });
   const orphans: CashflowOrphanRow[] = [];
@@ -52,6 +58,11 @@ export function buildStoreCashflowSnapshot(
 /**
  * Somme des montants de rachat (prix × quantité, sans commissions) par `store_name`,
  * pour les lignes non annulées.
+ *
+ * Note: la sortie de petite caisse correspond au moment où le magasin paie le client
+ * (au rachat), pas au paiement de la commission par achetetoncell. On ne filtre donc
+ * PAS sur `commission_paid` — seules les demandes annulées sont exclues, ce qui est
+ * cohérent avec le total des rachats du rapport (`globalYearBuybackTotal`).
  */
 export function buybackOutflowByStoreName(
   submissions: ReadonlyArray<{
@@ -59,13 +70,12 @@ export function buybackOutflowByStoreName(
     price: number;
     quantity: number;
     status: SubmissionStatus;
-    commission_paid: boolean;
   }>,
 ): Map<string, number> {
   const map = new Map<string, number>();
   for (const s of submissions) {
     const name = typeof s.store_name === "string" ? s.store_name.trim() : "";
-    if (!name || s.status === "cancelled" || !s.commission_paid) continue;
+    if (!name || s.status === "cancelled") continue;
     const line = submissionLineTotal(s.price, s.quantity);
     map.set(name, (map.get(name) ?? 0) + line);
   }

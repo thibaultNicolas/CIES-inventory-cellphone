@@ -34,3 +34,8 @@ export function hasMinRole(userRole: AppRole, minimum: AppRole): boolean {
 export function canManagePaymentsAndCommissions(role: AppRole): boolean {
   return role === "super_admin";
 }
+
+/** Export PDF du rapport commissions / rachats (admin et super_admin). */
+export function canExportCommissionReportPdf(role: AppRole): boolean {
+  return hasMinRole(role, "admin");
+}

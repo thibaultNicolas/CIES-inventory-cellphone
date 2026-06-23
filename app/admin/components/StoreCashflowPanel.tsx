@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useI18n } from "@/contexts/I18nContext";
+import { addStorePettyCashAmount } from "../../actions/add-store-petty-cash-amount";
 import { updateStorePettyCashOpening } from "../../actions/update-store-petty-cash-opening";
 import type { CashflowOrphanRow, StoreCashflowRow } from "@/lib/petty-cash";
 
@@ -22,21 +23,31 @@ export function StoreCashflowPanel({
   const { t } = useI18n();
   const router = useRouter();
   const [errorById, setErrorById] = useState<Record<string, string>>({});
+  const [addErrorById, setAddErrorById] = useState<Record<string, string>>({});
   const [savingId, setSavingId] = useState<string | null>(null);
+  const [addingId, setAddingId] = useState<string | null>(null);
 
   const openingSignature = rows.map((r) => `${r.id}:${r.openingBalance}`).join("|");
-  const [draftById, setDraftById] = useState<Record<string, string>>(() =>
+  const [openingDraftById, setOpeningDraftById] = useState<Record<string, string>>(() =>
     Object.fromEntries(rows.map((r) => [r.id, String(r.openingBalance)])),
   );
+  const [addDraftById, setAddDraftById] = useState<Record<string, string>>({});
 
   useEffect(() => {
-    setDraftById(Object.fromEntries(rows.map((r) => [r.id, String(r.openingBalance)])));
+    setOpeningDraftById(Object.fromEntries(rows.map((r) => [r.id, String(r.openingBalance)])));
   }, [openingSignature, rows]);
 
+  function parseAmount(raw: string, allowZero: boolean) {
+    const normalized = raw.trim().replace(",", ".");
+    const amount = parseFloat(normalized);
+    if (!Number.isFinite(amount) || amount < 0) return null;
+    if (!allowZero && amount <= 0) return null;
+    return amount;
+  }
+
   function saveOpening(storeId: string) {
-    const raw = (draftById[storeId] ?? "0").trim().replace(",", ".");
-    const amount = parseFloat(raw);
-    if (!Number.isFinite(amount) || amount < 0) {
+    const amount = parseAmount(openingDraftById[storeId] ?? "0", true);
+    if (amount === null) {
       setErrorById((e) => ({
         ...e,
         [storeId]: t.admin.pettyCashInvalidAmount,
@@ -63,6 +74,38 @@ export function StoreCashflowPanel({
     })();
   }
 
+  function addAmount(storeId: string) {
+    const amount = parseAmount(addDraftById[storeId] ?? "", false);
+    if (amount === null) {
+      setAddErrorById((e) => ({
+        ...e,
+        [storeId]: t.admin.pettyCashInvalidAddAmount,
+      }));
+      return;
+    }
+    setAddErrorById((e) => {
+      const next = { ...e };
+      delete next[storeId];
+      return next;
+    });
+    setAddingId(storeId);
+    void (async () => {
+      const res = await addStorePettyCashAmount({ storeId, amount });
+      setAddingId(null);
+      if (!res.success) {
+        setAddErrorById((e) => ({
+          ...e,
+          [storeId]: res.error ?? t.admin.pettyCashSaveError,
+        }));
+        return;
+      }
+      setAddDraftById((d) => ({ ...d, [storeId]: "" }));
+      router.refresh();
+    })();
+  }
+
+  const colCount = canEditOpening ? 7 : 6;
+
   return (
     <div className="space-y-8">
       <p className="max-w-3xl text-sm text-foreground/55">
@@ -75,23 +118,24 @@ export function StoreCashflowPanel({
       )}
 
       <div className="overflow-x-auto rounded-card border border-foreground/10 shadow-soft">
-        <table className="w-full min-w-[640px] text-left text-sm">
+        <table className="w-full min-w-[900px] text-left text-sm">
           <thead className="border-b border-foreground/10 bg-foreground/[0.03] text-[11px] font-semibold uppercase tracking-[0.08em] text-foreground/60">
             <tr>
               <th className="px-4 py-3">{t.admin.pettyCashStoreColumn}</th>
               <th className="px-4 py-3">{t.admin.pettyCashOpeningLabel}</th>
+              <th className="px-4 py-3">{t.admin.pettyCashAddedTotalLabel}</th>
+              {canEditOpening ? (
+                <th className="px-4 py-3">{t.admin.pettyCashAddAmountLabel}</th>
+              ) : null}
+              <th className="px-4 py-3">{t.admin.pettyCashTotalInflowLabel}</th>
               <th className="px-4 py-3">{t.admin.pettyCashBuybackOutLabel}</th>
               <th className="px-4 py-3">{t.admin.pettyCashBalanceLabel}</th>
-              {canEditOpening ? <th className="px-4 py-3 w-[120px]" /> : null}
             </tr>
           </thead>
           <tbody>
             {rows.length === 0 ? (
               <tr>
-                <td
-                  colSpan={canEditOpening ? 5 : 4}
-                  className="px-4 py-8 text-center text-foreground/50"
-                >
+                <td colSpan={colCount} className="px-4 py-8 text-center text-foreground/50">
                   {t.admin.pettyCashNoStores}
                 </td>
               </tr>
@@ -105,16 +149,26 @@ export function StoreCashflowPanel({
                   <td className="px-4 py-3">
                     {canEditOpening ? (
                       <div className="flex flex-col gap-1">
-                        <input
-                          type="text"
-                          inputMode="decimal"
-                          value={draftById[row.id] ?? ""}
-                          onChange={(e) =>
-                            setDraftById((d) => ({ ...d, [row.id]: e.target.value }))
-                          }
-                          className="w-full max-w-[140px] rounded-lg border border-foreground/15 bg-background px-2.5 py-1.5 text-sm"
-                          aria-label={t.admin.pettyCashOpeningLabel}
-                        />
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="text"
+                            inputMode="decimal"
+                            value={openingDraftById[row.id] ?? ""}
+                            onChange={(e) =>
+                              setOpeningDraftById((d) => ({ ...d, [row.id]: e.target.value }))
+                            }
+                            className="w-full max-w-[120px] rounded-lg border border-foreground/15 bg-background px-2.5 py-1.5 text-sm"
+                            aria-label={t.admin.pettyCashOpeningLabel}
+                          />
+                          <button
+                            type="button"
+                            disabled={savingId === row.id}
+                            onClick={() => saveOpening(row.id)}
+                            className="shrink-0 rounded-lg border border-foreground/20 px-2.5 py-1.5 text-xs font-medium text-foreground/70 transition-colors hover:bg-foreground/[0.04] disabled:opacity-50"
+                          >
+                            {t.admin.save}
+                          </button>
+                        </div>
                         {errorById[row.id] ? (
                           <span className="text-xs text-red-600">{errorById[row.id]}</span>
                         ) : null}
@@ -124,23 +178,47 @@ export function StoreCashflowPanel({
                     )}
                   </td>
                   <td className="px-4 py-3 tabular-nums text-foreground/80">
+                    {money(row.addedTotal)}
+                  </td>
+                  {canEditOpening ? (
+                    <td className="px-4 py-3">
+                      <div className="flex flex-col gap-1">
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="text"
+                            inputMode="decimal"
+                            placeholder="0.00"
+                            value={addDraftById[row.id] ?? ""}
+                            onChange={(e) =>
+                              setAddDraftById((d) => ({ ...d, [row.id]: e.target.value }))
+                            }
+                            className="w-full max-w-[120px] rounded-lg border border-foreground/15 bg-background px-2.5 py-1.5 text-sm"
+                            aria-label={t.admin.pettyCashAddAmountLabel}
+                          />
+                          <button
+                            type="button"
+                            disabled={addingId === row.id}
+                            onClick={() => addAmount(row.id)}
+                            className="shrink-0 rounded-lg border border-brand-primary/40 bg-brand-primary/10 px-2.5 py-1.5 text-xs font-semibold text-brand-primary transition-colors hover:bg-brand-primary/18 disabled:opacity-50"
+                          >
+                            {t.admin.pettyCashAddButton}
+                          </button>
+                        </div>
+                        {addErrorById[row.id] ? (
+                          <span className="text-xs text-red-600">{addErrorById[row.id]}</span>
+                        ) : null}
+                      </div>
+                    </td>
+                  ) : null}
+                  <td className="px-4 py-3 tabular-nums font-medium text-foreground/85">
+                    {money(row.totalInflow)}
+                  </td>
+                  <td className="px-4 py-3 tabular-nums text-foreground/80">
                     {money(row.buybackOutflow)}
                   </td>
                   <td className="px-4 py-3 tabular-nums font-semibold text-brand-dark">
                     {money(row.balance)}
                   </td>
-                  {canEditOpening ? (
-                    <td className="px-4 py-3">
-                      <button
-                        type="button"
-                        disabled={savingId === row.id}
-                        onClick={() => saveOpening(row.id)}
-                        className="rounded-lg border border-brand-primary/40 bg-brand-primary/10 px-3 py-1.5 text-xs font-semibold text-brand-primary transition-colors hover:bg-brand-primary/18 disabled:opacity-50"
-                      >
-                        {t.admin.save}
-                      </button>
-                    </td>
-                  ) : null}
                 </tr>
               ))
             )}

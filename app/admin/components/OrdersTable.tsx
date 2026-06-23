@@ -70,9 +70,10 @@ const actionBtn =
 
 const ORDER_STATUS_LABEL_KEY: Record<
   OrderStatusUi,
-  "orderStatusPending" | "orderStatusPaid" | "orderStatusCancelled"
+  "orderStatusPending" | "orderStatusToPay" | "orderStatusPaid" | "orderStatusCancelled"
 > = {
   pending: "orderStatusPending",
+  to_pay: "orderStatusToPay",
   paid: "orderStatusPaid",
   cancelled: "orderStatusCancelled",
 };
@@ -169,6 +170,7 @@ export function OrdersTable({
     () =>
       [
         { value: "pending" as const, label: t.admin.orderStatusPending },
+        { value: "to_pay" as const, label: t.admin.orderStatusToPay },
         { value: "paid" as const, label: t.admin.orderStatusPaid },
         { value: "cancelled" as const, label: t.admin.orderStatusCancelled },
       ] as const,

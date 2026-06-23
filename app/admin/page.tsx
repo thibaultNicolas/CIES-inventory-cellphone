@@ -126,6 +126,7 @@ type StoreRef = {
   id: string;
   name: string;
   petty_cash_opening_balance: number;
+  petty_cash_added_total: number;
 };
 
 type AdminSection =
@@ -372,25 +373,33 @@ async function getEmployees(): Promise<EmployeeRef[]> {
 
 async function getStores(): Promise<StoreRef[]> {
   const supabase = createAdminClient();
-  let query = supabase
+  const query = supabase
     .from("stores")
-    .select("id, name, petty_cash_opening_balance")
+    .select("id, name, petty_cash_opening_balance, petty_cash_added_total")
     .eq("is_active", true)
     .order("name", { ascending: true });
 
-  let { data, error } = await query;
+  const { data, error } = await query;
 
-  if (error && /petty_cash_opening_balance|column.*does not exist/i.test(String(error.message))) {
+  if (
+    error &&
+    /petty_cash_opening_balance|petty_cash_added_total|column.*does not exist/i.test(
+      String(error.message),
+    )
+  ) {
     const fb = await supabase
       .from("stores")
-      .select("id, name")
+      .select("id, name, petty_cash_opening_balance")
       .eq("is_active", true)
       .order("name", { ascending: true });
     if (fb.error) return [];
     return (fb.data || []).map((r) => ({
       id: r.id,
       name: r.name,
-      petty_cash_opening_balance: 0,
+      petty_cash_opening_balance: Number(
+        (r as { petty_cash_opening_balance?: unknown }).petty_cash_opening_balance ?? 0,
+      ),
+      petty_cash_added_total: 0,
     }));
   }
 
@@ -400,6 +409,9 @@ async function getStores(): Promise<StoreRef[]> {
     name: r.name,
     petty_cash_opening_balance: Number(
       (r as { petty_cash_opening_balance?: unknown }).petty_cash_opening_balance ?? 0,
+    ),
+    petty_cash_added_total: Number(
+      (r as { petty_cash_added_total?: unknown }).petty_cash_added_total ?? 0,
     ),
   }));
 }

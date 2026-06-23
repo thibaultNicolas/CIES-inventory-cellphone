@@ -31,7 +31,7 @@ import {
 import type { OrderStatusUi } from "@/lib/order-status";
 import type { SubmissionStatus } from "@/lib/submissions";
 import type { AppRole } from "@/lib/app-role";
-import { canManagePaymentsAndCommissions, hasMinRole } from "@/lib/app-role";
+import { canManagePaymentsAndCommissions, canExportCommissionReportPdf, hasMinRole } from "@/lib/app-role";
 
 type AdminSection =
   | "comptes"
@@ -562,7 +562,7 @@ export function AdminLayout({
                 showCommissionDebug={showCommissionDebug}
                 employees={employees}
                 stores={stores}
-                canExportPdf={canManageFinancials}
+                canExportPdf={canExportCommissionReportPdf(viewerRole)}
                 cashflowSnapshot={cashflowSnapshot}
                 canEditPettyCash={hasMinRole(viewerRole, "admin")}
               />

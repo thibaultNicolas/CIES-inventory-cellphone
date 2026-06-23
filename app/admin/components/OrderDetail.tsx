@@ -79,9 +79,10 @@ function formatDate(dateString: string, locale: string) {
 
 const ORDER_STATUS_LABEL_KEY: Record<
   OrderStatusUi,
-  "orderStatusPending" | "orderStatusPaid" | "orderStatusCancelled"
+  "orderStatusPending" | "orderStatusToPay" | "orderStatusPaid" | "orderStatusCancelled"
 > = {
   pending: "orderStatusPending",
+  to_pay: "orderStatusToPay",
   paid: "orderStatusPaid",
   cancelled: "orderStatusCancelled",
 };
@@ -378,6 +379,7 @@ export function OrderDetail({
               title={t.admin.status}
             >
               <option value="pending">{t.admin.orderStatusPending}</option>
+              <option value="to_pay">{t.admin.orderStatusToPay}</option>
               <option value="paid">{t.admin.orderStatusPaid}</option>
               <option value="cancelled">{t.admin.orderStatusCancelled}</option>
             </select>

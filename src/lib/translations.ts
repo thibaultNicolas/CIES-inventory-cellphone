@@ -434,8 +434,12 @@ export const translations = {
       pettyCashNav: "Petite caisse",
       pettyCashTitle: "Petite caisse par magasin",
       pettyCashSubtitle:
-        "Solde indicatif : caisse au départ moins la somme des rachats (prix × quantité, sans commissions). Les demandes annulées sont exclues. La provenance magasin sur chaque ligne doit correspondre au nom du magasin dans le référentiel.",
+        "Solde indicatif : (caisse au départ + montants ajoutés) moins la somme des rachats (prix × quantité, sans commissions). Chaque rachat est déduit dès la demande — indépendamment du paiement de la commission. Seules les demandes annulées sont exclues. La provenance magasin sur chaque ligne doit correspondre au nom du magasin dans le référentiel.",
       pettyCashOpeningLabel: "Caisse au départ",
+      pettyCashAddedTotalLabel: "Ajouts cumulés",
+      pettyCashAddAmountLabel: "Montant à ajouter",
+      pettyCashAddButton: "Ajouter",
+      pettyCashTotalInflowLabel: "Total entrées",
       pettyCashBuybackOutLabel: "Sorties rachat",
       pettyCashBalanceLabel: "Solde estimé",
       pettyCashStoreColumn: "Magasin",
@@ -443,11 +447,12 @@ export const translations = {
       pettyCashOrphansHint:
         "Ces montants proviennent d’un « Magasin » sur la demande qui ne correspond à aucun magasin actif du référentiel (orthographe ou magasin désactivé).",
       pettyCashEditHint:
-        "Administrateur : vous pouvez enregistrer la caisse au départ pour chaque magasin.",
+        "Administrateur : définissez la caisse au départ une fois, puis ajoutez des montants au besoin (ils s’accumulent).",
       pettyCashReadOnlyHint:
-        "Consultation uniquement : vous n’avez pas les droits pour modifier la caisse au départ.",
+        "Consultation uniquement : vous n’avez pas les droits pour modifier la petite caisse.",
       pettyCashNoStores: "Aucun magasin actif.",
-      pettyCashInvalidAmount: "Montant invalide (nombre positif attendu).",
+      pettyCashInvalidAmount: "Montant invalide (nombre positif ou zéro attendu).",
+      pettyCashInvalidAddAmount: "Montant invalide (nombre strictement positif attendu).",
       pettyCashSaveError: "Erreur à l’enregistrement.",
       pettyCashReportSectionTitle: "Cashflow — petite caisse par magasin",
       pettyCashFullPageLink: "Ouvrir l’onglet Petite caisse",
@@ -565,6 +570,7 @@ export const translations = {
       statusPaid: "Payé",
       statusCancelled: "Annulé",
       orderStatusPending: "En attente",
+      orderStatusToPay: "À payer",
       orderStatusPaid: "Commission payée",
       orderStatusCancelled: "Annulé",
       modelLabel: "Modèle",
@@ -619,7 +625,7 @@ export const translations = {
       forbiddenFinancialAction:
         "Action réservée au super administrateur (paiement et commissions).",
       adminReadOnlyFinancialsHint:
-        "Consultation : vous pouvez annuler une commande depuis le détail. Modifier prix, statut de paiement rachat ou commissions payées est réservé au super administrateur (onglet actuel).",
+        "Consultation et export (CSV, PDF) : vous pouvez voir toutes les demandes, annuler une commande et modifier le magasin. Modifier prix, statut de paiement ou commissions payées est réservé au super administrateur.",
       noDevicesForPeriod: "Aucun appareil pour cette période",
       markAsPaid: "Marquer comme payée",
       markAsUnpaid: "Marquer comme non payée",
@@ -636,7 +642,7 @@ export const translations = {
         "Super administrateur : gérez ici le statut de paiement rachat de chaque commande, ouvrez une commande pour ajuster les prix et marquer les commissions payées. Les règles de calcul des commissions se modifient en bas de cette page (liste des commandes).",
       commissionsTitle: "Statistiques & rapports",
       commissionsSubtitle:
-        "Tableaux, graphiques et exports (CSV, PDF selon les droits). Aucune action de paiement ni de commission sur cet écran.",
+        "Tableaux, graphiques et exports (CSV, PDF). Consultation pour les administrateurs ; les actions de paiement et de commission se font dans « Demandes de rachat » (super administrateur).",
       reportStatsOnlyHint:
         "Marquez une commande « Commission payée » dans l’onglet « Demandes de rachat » pour la retirer du bloc « À recevoir » (commissions et total indicatif).",
       reportStatsSectionTitle: "STATS",
@@ -1075,8 +1081,12 @@ export const translations = {
       pettyCashNav: "Petty cash",
       pettyCashTitle: "Petty cash by store",
       pettyCashSubtitle:
-        "Indicative balance: opening cash minus buybacks (price × quantity, excluding commissions). Cancelled requests are excluded. The store on each line must match the store name in reference data.",
+        "Indicative balance: (opening cash + added amounts) minus buybacks (price × quantity, excluding commissions). Each buyback is deducted as soon as the request is created — regardless of commission payment. Cancelled requests are excluded. The store on each line must match the store name in reference data.",
       pettyCashOpeningLabel: "Opening cash",
+      pettyCashAddedTotalLabel: "Added total",
+      pettyCashAddAmountLabel: "Amount to add",
+      pettyCashAddButton: "Add",
+      pettyCashTotalInflowLabel: "Total inflows",
       pettyCashBuybackOutLabel: "Buyback outflows",
       pettyCashBalanceLabel: "Estimated balance",
       pettyCashStoreColumn: "Store",
@@ -1084,11 +1094,12 @@ export const translations = {
       pettyCashOrphansHint:
         "These totals come from a store name on the request that does not match any active store in reference data (spelling or inactive store).",
       pettyCashEditHint:
-        "Admin: you can save the opening cash balance for each store.",
+        "Admin: set the opening cash once, then add amounts as needed (they accumulate).",
       pettyCashReadOnlyHint:
-        "View only: you don’t have permission to edit the opening cash balance.",
+        "View only: you don’t have permission to edit petty cash.",
       pettyCashNoStores: "No active stores.",
-      pettyCashInvalidAmount: "Invalid amount (expect a non-negative number).",
+      pettyCashInvalidAmount: "Invalid amount (expect zero or a positive number).",
+      pettyCashInvalidAddAmount: "Invalid amount (expect a positive number).",
       pettyCashSaveError: "Could not save.",
       pettyCashReportSectionTitle: "Cashflow — petty cash by store",
       pettyCashFullPageLink: "Open Petty cash tab",
@@ -1206,6 +1217,7 @@ export const translations = {
       statusPaid: "Paid",
       statusCancelled: "Cancelled",
       orderStatusPending: "Pending",
+      orderStatusToPay: "To pay",
       orderStatusPaid: "Commission paid",
       orderStatusCancelled: "Cancelled",
       modelLabel: "Model",
@@ -1260,7 +1272,7 @@ export const translations = {
       forbiddenFinancialAction:
         "This action is limited to super admins (payments and commissions).",
       adminReadOnlyFinancialsHint:
-        "View-only: you may cancel an order from the detail view. Changing price, trade-in payment status, or commission paid is limited to super admins (this tab).",
+        "View and export (CSV, PDF): you can see all requests, cancel an order, and change the store. Editing price, payment status, or commission paid is reserved for super admin.",
       noDevicesForPeriod: "No devices for this period",
       markAsPaid: "Mark as paid",
       markAsUnpaid: "Mark as unpaid",
@@ -1277,7 +1289,7 @@ export const translations = {
         "Super admin: set each order’s trade-in payment status here; open an order to adjust prices and mark commissions paid. Commission calculation rules are edited at the bottom of this page (order list).",
       commissionsTitle: "Statistics & reports",
       commissionsSubtitle:
-        "Charts and exports (CSV, PDF depending on role). No payment or commission actions on this screen.",
+        "Charts, tables, and exports (CSV, PDF). Admins can view and export; payment and commission actions are in Trade-in requests (super admin).",
       reportStatsOnlyHint:
         "Mark an order as “Commission paid” in the “Trade-in requests” tab to remove it from the “Outstanding” summary (commissions and indicative total).",
       reportStatsSectionTitle: "STATS",
