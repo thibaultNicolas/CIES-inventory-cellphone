@@ -1,3 +1,4 @@
+import { compareBrandsByDefaultOrder } from "@/lib/brands";
 import { createAdminClient, createCachedClient } from "@/lib/supabase-server";
 import { sortModelsByRecent } from "@/lib/model-sort";
 import { RachatWizard } from "./rachat-wizard";
@@ -30,23 +31,6 @@ type StoreRef = {
   name: string;
 };
 
-const DEFAULT_BRAND_ORDER = [
-  "iphone",
-  "samsung",
-  "google",
-  "motorola",
-  "lg",
-  "huawei",
-  "tcl",
-  "oneplus",
-] as const;
-
-function getBrandOrderIndex(brandName: string): number {
-  const normalized = brandName.trim().toLowerCase();
-  const idx = DEFAULT_BRAND_ORDER.findIndex((b) => b === normalized);
-  return idx === -1 ? Number.MAX_SAFE_INTEGER : idx;
-}
-
 async function getBrands(): Promise<Brand[]> {
   const supabase = createCachedClient();
   const { data, error } = await supabase
@@ -60,12 +44,7 @@ async function getBrands(): Promise<Brand[]> {
   }
 
   const brands = data || [];
-  brands.sort((a, b) => {
-    const orderA = getBrandOrderIndex(a.name);
-    const orderB = getBrandOrderIndex(b.name);
-    if (orderA !== orderB) return orderA - orderB;
-    return a.name.localeCompare(b.name);
-  });
+  brands.sort((a, b) => compareBrandsByDefaultOrder(a.name, b.name));
 
   return brands;
 }
@@ -134,13 +113,8 @@ async function getModelsWithMinPrice(): Promise<Model[]> {
   }
 
   const sortedModels: typeof mappedModels = [];
-  const sortedBrandEntries = Array.from(modelsByBrand.entries()).sort(
-    (a, b) => {
-      const orderA = getBrandOrderIndex(a[0]);
-      const orderB = getBrandOrderIndex(b[0]);
-      if (orderA !== orderB) return orderA - orderB;
-      return a[0].localeCompare(b[0]);
-    },
+  const sortedBrandEntries = Array.from(modelsByBrand.entries()).sort((a, b) =>
+    compareBrandsByDefaultOrder(a[0], b[0]),
   );
 
   for (const [brand, brandModels] of sortedBrandEntries) {

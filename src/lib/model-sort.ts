@@ -45,6 +45,12 @@ const ordreModelesApple = [
 ];
 
 const ordreModelesSamsung = [
+  "s26 ultra",
+  "s26 plus",
+  "s26+",
+  "s26 +",
+  "s26",
+  "s26 fe",
   "s25 edge",
   "s25 ultra",
   "s25+",

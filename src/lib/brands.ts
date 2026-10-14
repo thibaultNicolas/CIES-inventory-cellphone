@@ -8,20 +8,42 @@ export type BrandForHome = {
 };
 
 const DEFAULT_BRAND_ORDER = [
-  "iphone",
-  "samsung",
-  "google",
-  "motorola",
-  "lg",
-  "huawei",
-  "tcl",
-  "oneplus",
+  ["iphone", "apple"],
+  ["samsung"],
+  ["pixel", "google"],
+  ["motorola"],
+  ["lg"],
+  ["huawei"],
+  ["tcl"],
+  ["oneplus", "one plus"],
 ] as const;
 
-function getBrandOrderIndex(brandName: string): number {
-  const normalized = brandName.trim().toLowerCase();
-  const idx = DEFAULT_BRAND_ORDER.findIndex((b) => b === normalized);
+function normalizeBrandName(brandName: string): string {
+  return brandName
+    .trim()
+    .toLowerCase()
+    .replace(/[_-]+/g, " ")
+    .replace(/\s+/g, " ");
+}
+
+export function getBrandOrderIndex(brandName: string): number {
+  const normalized = normalizeBrandName(brandName);
+  const idx = DEFAULT_BRAND_ORDER.findIndex((aliases) =>
+    aliases.some(
+      (alias) =>
+        normalized === alias ||
+        normalized.startsWith(`${alias} `) ||
+        normalized.endsWith(` ${alias}`),
+    ),
+  );
   return idx === -1 ? Number.MAX_SAFE_INTEGER : idx;
+}
+
+export function compareBrandsByDefaultOrder(a: string, b: string): number {
+  const orderA = getBrandOrderIndex(a);
+  const orderB = getBrandOrderIndex(b);
+  if (orderA !== orderB) return orderA - orderB;
+  return a.localeCompare(b);
 }
 
 /** Fetch brands for home page "marques qu'on rachète" section. Sorted by default order then name. */
@@ -41,12 +63,7 @@ export async function getBrandsForHome(): Promise<BrandForHome[]> {
   }
 
   const brands = (data || []) as BrandForHome[];
-  brands.sort((a, b) => {
-    const orderA = getBrandOrderIndex(a.name);
-    const orderB = getBrandOrderIndex(b.name);
-    if (orderA !== orderB) return orderA - orderB;
-    return a.name.localeCompare(b.name);
-  });
+  brands.sort((a, b) => compareBrandsByDefaultOrder(a.name, b.name));
 
   return brands;
 }
