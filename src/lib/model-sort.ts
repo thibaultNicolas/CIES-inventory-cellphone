@@ -1,4 +1,10 @@
 const ordreModelesApple = [
+  "18 Pro Max",
+  "18 Pro",
+  "18 Plus",
+  "18 Air",
+  "18e",
+  "18",
   "17 Pro Max",
   "17 Pro",
   "17",
@@ -46,13 +52,14 @@ const ordreModelesApple = [
 
 const ordreModelesSamsung = [
   "s26 ultra",
+  "s26 edge",
   "s26 plus",
   "s26+",
   "s26 +",
   "s26",
   "s26 fe",
-  "s25 edge",
   "s25 ultra",
+  "s25 edge",
   "s25+",
   "s25",
   "s25 FE",
@@ -252,6 +259,24 @@ function normalizeModelName(name: string): string {
   return name.trim();
 }
 
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+const modelLabelPatterns = new Map<string, RegExp>();
+
+function matchesModelLabel(modelName: string, ordreModel: string): boolean {
+  let pattern = modelLabelPatterns.get(ordreModel);
+  if (!pattern) {
+    pattern = new RegExp(
+      `(^|[^a-z0-9])${escapeRegExp(ordreModel)}([^a-z0-9]|$)`,
+      "i",
+    );
+    modelLabelPatterns.set(ordreModel, pattern);
+  }
+  return pattern.test(modelName);
+}
+
 function findModelIndex(modelName: string, ordre: string[]): number {
   const normalized = normalizeModelName(modelName).toLowerCase();
 
@@ -264,15 +289,15 @@ function findModelIndex(modelName: string, ordre: string[]): number {
   }
 
   // 2) Then match entries where the catalog label contains the ordered model label.
-  // This handles variants like "iPhone 17 Pro Max 256GB" while avoiding
-  // false positives such as "17" matching "17 Pro Max".
+  // Word boundaries keep "8" from matching inside "18", while still matching
+  // variants like "iPhone 17 Pro Max 256GB".
   for (let i = 0; i < ordre.length; i++) {
     const ordreModel = normalizeModelName(ordre[i]).toLowerCase();
-    if (normalized.includes(ordreModel)) {
+    if (matchesModelLabel(normalized, ordreModel)) {
       return i;
     }
   }
-  
+
   return ordre.length;
 }
 
