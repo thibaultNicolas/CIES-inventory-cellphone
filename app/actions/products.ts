@@ -212,8 +212,31 @@ export async function createPrice(
   const admin = await requireSuperAdmin();
   if (!admin) return { success: false, data: null, error: "Unauthorized" };
 
+  if (!modelId) {
+    return { success: false, data: null, error: "Sélectionnez un modèle" };
+  }
+
+  if (!Number.isFinite(price) || price < 0) {
+    return { success: false, data: null, error: "Entrez un prix valide" };
+  }
+
   // Writes must bypass RLS
   const supabase = createAdminClient();
+
+  const { data: model, error: modelError } = await supabase
+    .from("models")
+    .select("id")
+    .eq("id", modelId)
+    .maybeSingle();
+
+  if (modelError) {
+    console.error("Error checking model:", modelError);
+    return { success: false, data: null, error: modelError.message };
+  }
+
+  if (!model) {
+    return { success: false, data: null, error: "Modèle introuvable" };
+  }
 
   const { data, error } = await supabase
     .from("prices")

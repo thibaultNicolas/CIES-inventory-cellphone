@@ -27,6 +27,7 @@ import { Plus, Edit2, Trash2, X, Save, Filter } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import Image from "next/image";
 import { ImageUploader } from "./ImageUploader";
+import { ModelSearchSelect } from "./ModelSearchSelect";
 
 type Brand = {
   id: string;
@@ -119,7 +120,7 @@ export function ProductsManager({
   const router = useRouter();
   const initialPf = mergePricesFilters(initialPricesFilters);
   const [brands] = useState(initialBrands);
-  const [models] = useState(initialModels);
+  const [models, setModels] = useState(initialModels);
   const [prices, setPrices] = useState(initialPrices);
   const [activeTab, setActiveTab] = useState<"brands" | "models" | "prices">(initialTab);
   const [editingBrand, setEditingBrand] = useState<string | null>(null);
@@ -130,6 +131,7 @@ export function ProductsManager({
   const [showBrandForm, setShowBrandForm] = useState(false);
   const [showModelForm, setShowModelForm] = useState(false);
   const [showPriceForm, setShowPriceForm] = useState(false);
+  const [newPriceModelId, setNewPriceModelId] = useState("");
   // Keep image URLs in React state so preview doesn't disappear
   const [newBrandLogoUrl, setNewBrandLogoUrl] = useState<string | null>(null);
   const [brandLogoDrafts, setBrandLogoDrafts] = useState<Record<string, string | null>>({});
@@ -153,6 +155,10 @@ export function ProductsManager({
   const [selectedPriceIds, setSelectedPriceIds] = useState<Set<string>>(() => new Set());
   const [bulkDialogOpen, setBulkDialogOpen] = useState(false);
   const pageSelectAllRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    setModels(initialModels);
+  }, [initialModels]);
 
   useEffect(() => {
     setPrices(initialPrices);
@@ -289,14 +295,51 @@ export function ProductsManager({
   const handleCreatePrice = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
-    const modelId = formData.get("modelId") as string;
+    const submittedModelId = String(formData.get("modelId") ?? "");
+    const visibleText =
+      e.currentTarget.querySelector<HTMLInputElement>("[role='combobox']")?.value ?? "";
+    const sameLabel = (left: string, right: string) =>
+      left
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/\s+/g, " ")
+        .trim() ===
+      right
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/\s+/g, " ")
+        .trim();
+    const labelMatches = priceModelOptions.filter((option) =>
+      sameLabel(option.label, visibleText),
+    );
+    const visibleLabel = visibleText
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/\s+/g, " ")
+      .trim();
+    const modelId = !visibleLabel
+      ? ""
+      : labelMatches.length === 1
+        ? labelMatches[0].value
+        : submittedModelId && labelMatches.some((option) => option.value === submittedModelId)
+          ? submittedModelId
+          : "";
     const condition = formData.get("condition") as string;
     const memory = formData.get("memory") as string;
     const price = parseFloat(formData.get("price") as string);
 
+    if (!modelId) {
+      alert("Sélectionnez un modèle");
+      return;
+    }
+
     const result = await createPrice(modelId, condition, memory, price);
     if (result.success) {
       setShowPriceForm(false);
+      setNewPriceModelId("");
       router.refresh();
     } else {
       alert(result.error);
@@ -377,25 +420,36 @@ export function ProductsManager({
 
   const uniqueBrandsForPrices = useMemo(() => {
     const brandSet = new Set<string>();
-    prices.forEach((price) => {
-      const brandName = getBrandName(price.models.brands);
+    const addBrand = (brandName: string) => {
       if (brandName) brandSet.add(brandName);
-    });
-    return Array.from(brandSet).sort();
-  }, [prices]);
+    };
+    models.forEach((model) => addBrand(getBrandName(model.brands)));
+    prices.forEach((price) => addBrand(getBrandName(price.models.brands)));
+    return Array.from(brandSet).sort((a, b) => a.localeCompare(b, "fr"));
+  }, [models, prices]);
 
   const uniqueModelsForPrices = useMemo(() => {
     const modelSet = new Set<string>();
-    prices.forEach((price) => {
-      const brandName = getBrandName(price.models.brands);
-      if (selectedBrandFilter !== "all" && brandName !== selectedBrandFilter) {
-        return;
-      }
-      const modelName = price.models.name;
-      modelSet.add(`${brandName} ${modelName}`);
-    });
-    return Array.from(modelSet).sort();
-  }, [prices, selectedBrandFilter]);
+    const addModel = (brandName: string, modelName: string) => {
+      if (selectedBrandFilter !== "all" && brandName !== selectedBrandFilter) return;
+      const label = `${brandName} ${modelName}`.trim();
+      if (label) modelSet.add(label);
+    };
+    models.forEach((model) => addModel(getBrandName(model.brands), model.name));
+    prices.forEach((price) => addModel(getBrandName(price.models.brands), price.models.name));
+    return Array.from(modelSet).sort((a, b) => a.localeCompare(b, "fr"));
+  }, [models, prices, selectedBrandFilter]);
+
+  const priceModelOptions = useMemo(
+    () =>
+      models
+        .map((model) => ({
+          value: model.id,
+          label: `${getBrandName(model.brands)} ${model.name}`.trim(),
+        }))
+        .sort((a, b) => a.label.localeCompare(b.label, "fr")),
+    [models],
+  );
 
   useEffect(() => {
     // If the selected brand changes, ensure the selected model still belongs to that brand.
@@ -1102,7 +1156,10 @@ export function ProductsManager({
               Prix
             </h2>
             <button
-              onClick={() => setShowPriceForm(!showPriceForm)}
+              onClick={() => {
+                if (!showPriceForm) setNewPriceModelId("");
+                setShowPriceForm((open) => !open);
+              }}
               className="flex shrink-0 items-center justify-center gap-2 rounded-full bg-brand-dark px-6 py-3 text-sm font-medium uppercase tracking-[0.15em] text-background shadow-lg transition-all duration-300 hover:bg-brand-primary hover:scale-105 sm:self-center"
             >
               <Plus className="h-4 w-4" />
@@ -1130,18 +1187,19 @@ export function ProductsManager({
                 ))}
               </select>
 
-              <select
+              <ModelSearchSelect
+                className="min-w-56"
+                options={uniqueModelsForPrices.map((model) => ({
+                  value: model,
+                  label: model,
+                }))}
                 value={selectedModelFilter}
-                onChange={(e) => setSelectedModelFilter(e.target.value)}
-                className="rounded-card border-2 border-transparent bg-[#F5F5F4] px-4 py-2 text-sm text-foreground transition-all focus:border-brand-primary focus:bg-background focus:outline-none"
-              >
-                <option value="all">Tous les modèles</option>
-                {uniqueModelsForPrices.map((model) => (
-                  <option key={model} value={model}>
-                    {model}
-                  </option>
-                ))}
-              </select>
+                onChange={setSelectedModelFilter}
+                allOption={{ value: "all", label: "Tous les modèles" }}
+                placeholder="Rechercher un modèle"
+                emptyLabel="Aucun modèle trouvé."
+                clearLabel="Effacer le modèle"
+              />
 
               <select
                 value={selectedConditionFilter}
@@ -1280,7 +1338,10 @@ export function ProductsManager({
                     <h3 className="text-lg font-medium text-brand-dark">Nouveau prix</h3>
                     <button
                       type="button"
-                      onClick={() => setShowPriceForm(false)}
+                      onClick={() => {
+                        setShowPriceForm(false);
+                        setNewPriceModelId("");
+                      }}
                       className="text-foreground/60 hover:text-foreground"
                     >
                       <X className="h-5 w-5" />
@@ -1291,18 +1352,17 @@ export function ProductsManager({
                       <label className="mb-2 block text-sm font-medium text-foreground">
                         Modèle *
                       </label>
-                      <select
+                      <ModelSearchSelect
                         name="modelId"
                         required
-                        className="w-full rounded-card border-2 border-transparent bg-[#F5F5F4] px-4 py-3 text-foreground transition-all focus:border-brand-primary focus:bg-background focus:outline-none"
-                      >
-                        <option value="">Sélectionner un modèle</option>
-                        {models.map((model) => (
-                          <option key={model.id} value={model.id}>
-                            {getBrandName(model.brands)} {model.name}
-                          </option>
-                        ))}
-                      </select>
+                        options={priceModelOptions}
+                        value={newPriceModelId}
+                        onChange={setNewPriceModelId}
+                        placeholder="Rechercher un modèle"
+                        emptyLabel="Aucun modèle trouvé."
+                        clearLabel="Effacer le modèle"
+                        inputClassName="py-3"
+                      />
                     </div>
                     <div>
                       <label className="mb-2 block text-sm font-medium text-foreground">
